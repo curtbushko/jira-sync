@@ -35,3 +35,5 @@ go.work.sum
 /bin
 /temp
 .claude/settings.local.json
+
+jira-sync
