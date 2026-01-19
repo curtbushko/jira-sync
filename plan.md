@@ -82,7 +82,8 @@ end-date: 2026-01-23
 jira-url: ""
 sync-status: pending
 parent: GUARDIAN
-dependencies: []
+sync-dependencies: []
+jira-dependencies: []
 content-hash: ""
 ---
 
@@ -106,9 +107,11 @@ The `content-hash` field stores a SHA256 hash of the **entire file** (frontmatte
 **What triggers a resync:**
 - Description changes
 - Title changes
-- Dependencies changes
+- Jira-dependencies changes
 - Parent changes
 - Any frontmatter field modification
+
+**Note:** Changes to `sync-dependencies` do NOT trigger a resync since they only affect local creation ordering, not Jira ticket content.
 
 **How it works:**
 
@@ -143,8 +146,45 @@ The `content-hash` field stores a SHA256 hash of the **entire file** (frontmatte
 | `jira-url` | string | Full URL to Jira issue (populated after creation) |
 | `sync-status` | string | Sync state: pending, created, linked (tracks sync with Jira, not ticket status) |
 | `parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100") |
-| `dependencies` | array | List of task IDs this task depends on (e.g., ["KB-1", "ERR-1"]) |
+| `sync-dependencies` | array | Task IDs that must be created BEFORE this task (controls creation order, e.g., ["KB-1"]) |
+| `jira-dependencies` | array | Task IDs this task is blocked by (creates "blocks" links in Jira, e.g., ["KB-1", "ERR-1"]) |
 | `content-hash` | string | SHA256 hash of entire file (used to detect changes needing resync) |
+
+### Dependency Types Explained
+
+The two dependency fields serve different purposes:
+
+**`sync-dependencies`** - Controls local file creation ordering
+- Determines the order in which tickets are created in Jira
+- Uses topological sort to ensure dependencies are created first
+- Does NOT create any links in Jira
+- Example: If `KB-2` has `sync-dependencies: ["KB-1"]`, KB-1's ticket will be created before KB-2's
+
+**`jira-dependencies`** - Controls Jira ticket linking
+- Creates "blocks" links between Jira tickets after creation
+- The listed tasks "block" the current task (must complete first)
+- Does NOT affect creation order
+- Example: If `KB-2` has `jira-dependencies: ["KB-1"]`, a "GUARD-101 blocks GUARD-102" link is created
+
+**Common patterns:**
+
+1. **Same dependencies** - Most tasks will have identical values:
+   ```yaml
+   sync-dependencies: ["KB-1"]
+   jira-dependencies: ["KB-1"]
+   ```
+
+2. **Sync-only dependency** - Task needs another created first, but no Jira link needed:
+   ```yaml
+   sync-dependencies: ["KB-1"]
+   jira-dependencies: []
+   ```
+
+3. **Jira-only dependency** - Task can be created in any order, but needs Jira link:
+   ```yaml
+   sync-dependencies: []
+   jira-dependencies: ["KB-1"]
+   ```
 
 ---
 
@@ -167,7 +207,9 @@ jira-sync create [flags]
 | `--title` | `-t` | Yes | Task ID and title (e.g., "KB-1: Initialize Project") |
 | `--parent` | `-p` | Yes | Parent epic/story key (e.g., "GUARD-100") |
 | `--description` | `-d` | Yes | Task description including acceptance criteria (can be multi-line, becomes Jira description) |
-| `--dependencies` | | No | Comma-separated list of task IDs (e.g., "KB-1,ERR-1") |
+| `--sync-deps` | `-s` | No | Comma-separated task IDs for creation ordering (e.g., "KB-1,ERR-1") |
+| `--jira-deps` | `-j` | No | Comma-separated task IDs for Jira "blocks" links (e.g., "KB-1,ERR-1") |
+| `--deps` | | No | Shorthand: sets BOTH sync-deps and jira-deps to the same value |
 | `--output` | `-o` | No | Output directory (default: `./tasks/`) |
 
 **Examples:**
@@ -179,18 +221,26 @@ jira-sync create \
   --parent "GUARD-100" \
   --description "Initialize the Kubebuilder project using the CLI tool."
 
-# Task with dependencies
+# Task with dependencies (shorthand sets both sync and jira deps)
 jira-sync create \
   --title "CTRL-1: Create Basic Controller Scaffold" \
   --parent "GUARD-100" \
-  --dependencies "KB-3,ERR-1" \
+  --deps "KB-3,ERR-1" \
   --description "Create the basic Deployment controller structure. Controller compiles and can be instantiated in tests."
+
+# Task with separate sync and jira dependencies
+jira-sync create \
+  --title "ERR-5: Implement Pod Listing" \
+  --parent "GUARD-100" \
+  --sync-deps "KB-3" \
+  --jira-deps "KB-3,ERR-1" \
+  --description "Implement pod listing by deployment."
 
 # Multi-line description with acceptance criteria using heredoc (for Claude)
 jira-sync create \
   --title "ERR-2: Implement Replica Failure Detection" \
   --parent "GUARD-100" \
-  --dependencies "ERR-1" \
+  --deps "ERR-1" \
   --description "$(cat <<'EOF'
 Implement detection of replica failures by examining the Deployment status.
 
@@ -219,7 +269,9 @@ end-date: ""
 jira-url: ""
 sync-status: pending
 parent: GUARD-100
-dependencies: []
+sync-dependencies: []
+jira-dependencies: []
+content-hash: ""
 ---
 
 Initialize the Kubebuilder project using the CLI tool.
@@ -276,18 +328,23 @@ jira-sync sync ./tasks/ --status-only
 ```
 1. Parse all task files in directory
 2. Validate frontmatter and dependencies
-3. Show summary:
-   - X tasks pending (will create)
-   - Y tasks created (will link dependencies)
+3. Topological sort pending tasks by sync-dependencies
+   - Detect circular dependencies → error
+   - Determine creation order
+4. Show summary:
+   - X tasks pending (will create in topological order)
+   - Y tasks created (will link jira-dependencies)
    - Z tasks linked (up to date)
-4. Prompt for confirmation
-5. Create tickets for pending tasks
+5. Prompt for confirmation
+6. Create tickets for pending tasks IN TOPOLOGICAL ORDER
+   - Process tasks with no sync-dependencies first
+   - Then tasks whose sync-dependencies are satisfied
    - Update local files with jira-number, jira-url
    - Set sync-status to 'created'
-6. Link dependencies for created tasks
-   - Create "blocks" links in Jira
+7. Link jira-dependencies for created tasks
+   - Create "blocks" links in Jira based on jira-dependencies
    - Set sync-status to 'linked'
-7. Show final summary
+8. Show final summary
 ```
 
 **Output Example:**
@@ -296,16 +353,16 @@ jira-sync sync ./tasks/ --status-only
 Scanning ./tasks/...
 Found 47 task files:
   - 4 pending (will create tickets)
-  - 10 created (will link dependencies)
+  - 10 created (will link jira-dependencies)
   - 33 linked (up to date)
 
-Pending tickets to create:
-  - KB-1: Kubebuilder - Initialize Project and Repository
-  - KB-2: Create Shared Type Definitions
-  - KB-3: Create Shared Interfaces
-  - KB-4: Create Mock Implementations
+Pending tickets to create (topological order by sync-dependencies):
+  1. KB-1: Kubebuilder - Initialize Project and Repository (no sync-deps)
+  2. KB-2: Create Shared Type Definitions (after: KB-1)
+  3. KB-3: Create Shared Interfaces (after: KB-2)
+  4. KB-4: Create Mock Implementations (after: KB-3)
 
-Dependencies to link:
+Jira links to create (from jira-dependencies):
   - KB-2 blocked by KB-1
   - KB-3 blocked by KB-2
   - KB-4 blocked by KB-3
@@ -313,20 +370,20 @@ Dependencies to link:
 
 Sync 47 tasks with Jira? [y/N] y
 
-Creating tickets...
+Creating tickets (in topological order)...
 ✓ KB-1 → GUARD-101
 ✓ KB-2 → GUARD-102
 ✓ KB-3 → GUARD-103
 ✓ KB-4 → GUARD-104
 
-Linking dependencies...
+Linking jira-dependencies...
 ✓ GUARD-102 blocked by GUARD-101
 ✓ GUARD-103 blocked by GUARD-102
 ✓ GUARD-104 blocked by GUARD-103
 
 Summary:
-  ✓ 4 tickets created
-  ✓ 10 dependency links added
+  ✓ 4 tickets created (in dependency order)
+  ✓ 10 jira-dependency links added
   ✓ 47 tasks synced
 ```
 
@@ -688,7 +745,8 @@ Designed for easy use by Claude when generating tickets.
 
 Example:
   jira-sync create --title "KB-1: Initialize Project" --parent GUARD-100 --description "Initialize kubebuilder"
-  jira-sync create -t "ERR-1: Detector Stub" -p GUARD-100 -d "Create stub" --dependencies "KB-3"`,
+  jira-sync create -t "ERR-1: Detector Stub" -p GUARD-100 -d "Create stub" --deps "KB-3"
+  jira-sync create -t "ERR-2: Pod Listing" -p GUARD-100 -d "List pods" --sync-deps "KB-3" --jira-deps "KB-3,ERR-1"`,
     RunE: runCreate,
 }
 
@@ -700,8 +758,12 @@ func init() {
     createCmd.Flags().StringP("parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
     createCmd.Flags().StringP("description", "d", "", "Task description including acceptance criteria (becomes Jira description)")
 
-    // Optional flags
-    createCmd.Flags().String("dependencies", "", "Comma-separated task IDs (e.g., 'KB-1,ERR-1')")
+    // Dependency flags
+    createCmd.Flags().StringP("sync-deps", "s", "", "Comma-separated task IDs for creation ordering (e.g., 'KB-1,ERR-1')")
+    createCmd.Flags().StringP("jira-deps", "j", "", "Comma-separated task IDs for Jira 'blocks' links (e.g., 'KB-1,ERR-1')")
+    createCmd.Flags().String("deps", "", "Shorthand: sets BOTH sync-deps and jira-deps to the same value")
+
+    // Other optional flags
     createCmd.Flags().StringP("output", "o", "./tasks", "Output directory for task files")
 
     // Mark required
@@ -713,15 +775,8 @@ func init() {
     viper.BindPFlag("defaults.output_dir", createCmd.Flags().Lookup("output"))
 }
 
-func runCreate(cmd *cobra.Command, args []string) error {
-    // Get flag values
-    title, _ := cmd.Flags().GetString("title")
-    parent, _ := cmd.Flags().GetString("parent")
-    description, _ := cmd.Flags().GetString("description")
-    depsStr, _ := cmd.Flags().GetString("dependencies")
-    outputDir, _ := cmd.Flags().GetString("output")
-
-    // Parse dependencies
+// parseDeps parses a comma-separated dependency string into a slice
+func parseDeps(depsStr string) []string {
     var deps []string
     if depsStr != "" {
         for _, d := range strings.Split(depsStr, ",") {
@@ -730,6 +785,29 @@ func runCreate(cmd *cobra.Command, args []string) error {
                 deps = append(deps, d)
             }
         }
+    }
+    return deps
+}
+
+func runCreate(cmd *cobra.Command, args []string) error {
+    // Get flag values
+    title, _ := cmd.Flags().GetString("title")
+    parent, _ := cmd.Flags().GetString("parent")
+    description, _ := cmd.Flags().GetString("description")
+    syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
+    jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
+    depsStr, _ := cmd.Flags().GetString("deps")
+    outputDir, _ := cmd.Flags().GetString("output")
+
+    // Parse dependencies
+    // If --deps is set, use it for both; otherwise use individual flags
+    var syncDeps, jiraDeps []string
+    if depsStr != "" {
+        syncDeps = parseDeps(depsStr)
+        jiraDeps = parseDeps(depsStr)
+    } else {
+        syncDeps = parseDeps(syncDepsStr)
+        jiraDeps = parseDeps(jiraDepsStr)
     }
 
     // Ensure output directory exists
@@ -755,15 +833,17 @@ func runCreate(cmd *cobra.Command, args []string) error {
     task := &markdown.TaskFile{
         Path: filepath,
         Frontmatter: markdown.Frontmatter{
-            Title:        title,
-            JiraNumber:   "",
-            CreatedDate:  now.Format("2006-01-02"),
-            StartDate:    "",
-            EndDate:      "",
-            JiraURL:      "",
-            SyncStatus:   markdown.SyncStatusPending,
-            Parent:       parent,
-            Dependencies: deps,
+            Title:            title,
+            JiraNumber:       "",
+            CreatedDate:      now.Format("2006-01-02"),
+            StartDate:        "",
+            EndDate:          "",
+            JiraURL:          "",
+            SyncStatus:       markdown.SyncStatusPending,
+            Parent:           parent,
+            SyncDependencies: syncDeps,
+            JiraDependencies: jiraDeps,
+            ContentHash:      "",
         },
         Description: description,
     }
@@ -776,8 +856,11 @@ func runCreate(cmd *cobra.Command, args []string) error {
     color.Green("✓ Created: %s", filepath)
     fmt.Printf("  Title: %s\n", title)
     fmt.Printf("  Parent: %s\n", parent)
-    if len(deps) > 0 {
-        fmt.Printf("  Dependencies: %s\n", strings.Join(deps, ", "))
+    if len(syncDeps) > 0 {
+        fmt.Printf("  Sync-Dependencies: %s\n", strings.Join(syncDeps, ", "))
+    }
+    if len(jiraDeps) > 0 {
+        fmt.Printf("  Jira-Dependencies: %s\n", strings.Join(jiraDeps, ", "))
     }
 
     return nil
@@ -884,10 +967,16 @@ func runSync(cmd *cobra.Command, args []string) error {
         }
     }
 
+    // Topological sort pending tasks by sync-dependencies
+    sortedPending, err := sync.TopologicalSort(pending, tasks)
+    if err != nil {
+        return fmt.Errorf("dependency error: %w", err)
+    }
+
     // Show summary
     fmt.Printf("Found %d task files:\n", len(tasks))
-    fmt.Printf("  - %d pending (will create tickets)\n", len(pending))
-    fmt.Printf("  - %d created (will link dependencies)\n", len(created))
+    fmt.Printf("  - %d pending (will create in topological order)\n", len(sortedPending))
+    fmt.Printf("  - %d created (will link jira-dependencies)\n", len(created))
     fmt.Printf("  - %d modified (will update Jira description)\n", len(needsUpdate))
     fmt.Printf("  - %d linked (up to date)\n", len(linked))
     fmt.Println()
@@ -898,8 +987,8 @@ func runSync(cmd *cobra.Command, args []string) error {
 
     if dryRun {
         color.Yellow("Dry run - no changes will be made")
-        showPendingTickets(pending)
-        showDependenciesToLink(created, tasks)
+        showPendingTickets(sortedPending) // Shows in topological order
+        showJiraDependenciesToLink(created, tasks)
         return nil
     }
 
@@ -923,21 +1012,21 @@ func runSync(cmd *cobra.Command, args []string) error {
     // Create orchestrator
     orch := sync.NewOrchestrator(client, cfg, project)
 
-    // Phase 1: Create tickets
-    if !linkOnly && len(pending) > 0 {
-        color.Cyan("\nCreating tickets...\n")
-        if err := orch.CreateTickets(cmd.Context(), pending); err != nil {
+    // Phase 1: Create tickets IN TOPOLOGICAL ORDER (respects sync-dependencies)
+    if !linkOnly && len(sortedPending) > 0 {
+        color.Cyan("\nCreating tickets (in topological order)...\n")
+        if err := orch.CreateTickets(cmd.Context(), sortedPending); err != nil {
             return fmt.Errorf("create tickets: %w", err)
         }
         // Move created tickets to the created list for linking
-        created = append(created, pending...)
+        created = append(created, sortedPending...)
     }
 
-    // Phase 2: Link dependencies
+    // Phase 2: Link jira-dependencies
     if !createOnly && len(created) > 0 {
-        color.Cyan("\nLinking dependencies...\n")
-        if err := orch.LinkDependencies(cmd.Context(), created, tasks); err != nil {
-            return fmt.Errorf("link dependencies: %w", err)
+        color.Cyan("\nLinking jira-dependencies...\n")
+        if err := orch.LinkJiraDependencies(cmd.Context(), created, tasks); err != nil {
+            return fmt.Errorf("link jira-dependencies: %w", err)
         }
     }
 
@@ -1003,16 +1092,17 @@ type TaskFile struct {
 }
 
 type Frontmatter struct {
-    Title        string   `yaml:"title"`
-    JiraNumber   string   `yaml:"jira-number"`
-    CreatedDate  string   `yaml:"created-date"`
-    StartDate    string   `yaml:"start-date"`
-    EndDate      string   `yaml:"end-date"`
-    JiraURL      string   `yaml:"jira-url"`
-    SyncStatus   string   `yaml:"sync-status"`   // Tracks sync state, not Jira ticket status
-    Parent       string   `yaml:"parent"`
-    Dependencies []string `yaml:"dependencies"`
-    ContentHash  string   `yaml:"content-hash"`  // SHA256 of description for change detection
+    Title            string   `yaml:"title"`
+    JiraNumber       string   `yaml:"jira-number"`
+    CreatedDate      string   `yaml:"created-date"`
+    StartDate        string   `yaml:"start-date"`
+    EndDate          string   `yaml:"end-date"`
+    JiraURL          string   `yaml:"jira-url"`
+    SyncStatus       string   `yaml:"sync-status"`        // Tracks sync state, not Jira ticket status
+    Parent           string   `yaml:"parent"`
+    SyncDependencies []string `yaml:"sync-dependencies"`  // Controls creation order (topological sort)
+    JiraDependencies []string `yaml:"jira-dependencies"`  // Creates "blocks" links in Jira
+    ContentHash      string   `yaml:"content-hash"`       // SHA256 of description for change detection
 }
 
 // SyncStatus values - tracks sync state between local files and Jira
@@ -1023,13 +1113,14 @@ const (
 )
 
 // ComputeContentHash returns SHA256 hash of the entire file for change detection
-// It hashes title + parent + dependencies + description (excludes content-hash itself)
+// It hashes title + parent + jira-dependencies + description
+// NOTE: sync-dependencies are NOT included since they don't affect Jira content
 func (t *TaskFile) ComputeContentHash() string {
-    // Build canonical content string (excludes content-hash to avoid circular dependency)
+    // Build canonical content string (excludes content-hash and sync-dependencies)
     var buf bytes.Buffer
     buf.WriteString(t.Frontmatter.Title)
     buf.WriteString(t.Frontmatter.Parent)
-    for _, dep := range t.Frontmatter.Dependencies {
+    for _, dep := range t.Frontmatter.JiraDependencies {
         buf.WriteString(dep)
     }
     buf.WriteString(t.Description)
@@ -1045,6 +1136,15 @@ func (t *TaskFile) NeedsResync() bool {
     }
     currentHash := t.ComputeContentHash()
     return currentHash != t.Frontmatter.ContentHash
+}
+
+// TaskID extracts the task ID from the title (e.g., "KB-1" from "KB-1: Title")
+func (t *TaskFile) TaskID() string {
+    parts := strings.SplitN(t.Frontmatter.Title, ":", 2)
+    if len(parts) > 0 {
+        return strings.TrimSpace(parts[0])
+    }
+    return ""
 }
 ```
 
@@ -1087,6 +1187,91 @@ func ParseTaskFile(path string) (*TaskFile, error) {
 }
 ```
 
+### Topological Sort (for sync-dependencies)
+
+```go
+// internal/sync/toposort.go
+package sync
+
+import (
+    "fmt"
+
+    "github.com/curtbushko/jira-sync/internal/markdown"
+)
+
+// TopologicalSort orders tasks so that sync-dependencies are created first.
+// Returns error if circular dependency is detected.
+func TopologicalSort(pending []*markdown.TaskFile, allTasks []*markdown.TaskFile) ([]*markdown.TaskFile, error) {
+    // Build task ID to task map (includes all tasks, not just pending)
+    taskByID := make(map[string]*markdown.TaskFile)
+    for _, t := range allTasks {
+        taskByID[t.TaskID()] = t
+    }
+
+    // Build adjacency list for pending tasks only
+    pendingSet := make(map[string]bool)
+    for _, t := range pending {
+        pendingSet[t.TaskID()] = true
+    }
+
+    // Kahn's algorithm for topological sort
+    // Count incoming edges (dependencies) for each pending task
+    inDegree := make(map[string]int)
+    for _, t := range pending {
+        id := t.TaskID()
+        inDegree[id] = 0
+    }
+
+    // Count sync-dependencies that are also pending
+    for _, t := range pending {
+        id := t.TaskID()
+        for _, depID := range t.Frontmatter.SyncDependencies {
+            if pendingSet[depID] {
+                inDegree[id]++
+            }
+            // If dependency is not pending, it's already created (or missing)
+        }
+    }
+
+    // Start with tasks that have no pending dependencies
+    var queue []string
+    for id, deg := range inDegree {
+        if deg == 0 {
+            queue = append(queue, id)
+        }
+    }
+
+    var sorted []*markdown.TaskFile
+    for len(queue) > 0 {
+        // Pop from queue
+        id := queue[0]
+        queue = queue[1:]
+
+        task := taskByID[id]
+        sorted = append(sorted, task)
+
+        // Reduce in-degree for tasks that depend on this one
+        for _, t := range pending {
+            for _, depID := range t.Frontmatter.SyncDependencies {
+                if depID == id {
+                    inDegree[t.TaskID()]--
+                    if inDegree[t.TaskID()] == 0 {
+                        queue = append(queue, t.TaskID())
+                    }
+                }
+            }
+        }
+    }
+
+    // Check for circular dependency
+    if len(sorted) != len(pending) {
+        return nil, fmt.Errorf("circular sync-dependency detected")
+    }
+
+    return sorted, nil
+}
+```
+
 ### Batch Creation
 
 ```go
@@ -1101,13 +1286,13 @@ import (
 
 type BatchCreator struct {
     jiraClient *jira.Client
-    tasks      []*markdown.TaskFile
+    tasks      []*markdown.TaskFile // Already topologically sorted by sync-dependencies
     project    string
     parent     string
 }
 
 func (b *BatchCreator) Create(ctx context.Context) error {
-    // Phase 1: Create all issues without dependencies
+    // Create issues in order (tasks are pre-sorted by sync-dependencies)
     issueMap := make(map[string]string) // local ID -> Jira key
 
     for _, task := range b.tasks {
@@ -1117,7 +1302,7 @@ func (b *BatchCreator) Create(ctx context.Context) error {
         }
 
         // Extract local ID from title (e.g., "KB-1" from "KB-1: ...")
-        localID := extractLocalID(task.Frontmatter.Title)
+        localID := task.TaskID()
         issueMap[localID] = issue.Key
 
         // Update local file
@@ -1130,6 +1315,8 @@ func (b *BatchCreator) Create(ctx context.Context) error {
         if err := markdown.WriteTaskFile(task); err != nil {
             return fmt.Errorf("update file %s: %w", task.Path, err)
         }
+
+        color.Green("✓ %s → %s", localID, issue.Key)
     }
 
     return nil
@@ -1140,7 +1327,7 @@ func (b *BatchCreator) createIssue(ctx context.Context, task *markdown.TaskFile)
         Fields: &jira.IssueFields{
             Project:     jira.Project{Key: b.project},
             Summary:     task.Frontmatter.Title,
-            Description: task.Body,
+            Description: task.Description,
             Type:        jira.IssueType{Name: "Task"},
             Parent:      &jira.Parent{Key: task.Frontmatter.Parent},
         },
@@ -1151,7 +1338,7 @@ func (b *BatchCreator) createIssue(ctx context.Context, task *markdown.TaskFile)
 }
 ```
 
-### Dependency Linking
+### Jira Dependency Linking
 
 ```go
 // internal/sync/dependencies.go
@@ -1160,32 +1347,36 @@ package sync
 import (
     "context"
     "fmt"
+
+    "github.com/fatih/color"
 )
 
-type DependencyLinker struct {
+// JiraDependencyLinker creates "blocks" links in Jira based on jira-dependencies field.
+// This is separate from sync-dependencies which only affects creation order.
+type JiraDependencyLinker struct {
     jiraClient *jira.Client
     tasks      []*markdown.TaskFile
 }
 
-func (d *DependencyLinker) Link(ctx context.Context) error {
+func (d *JiraDependencyLinker) Link(ctx context.Context) error {
     // Build local ID to Jira key map
     idMap := make(map[string]string)
     for _, task := range d.tasks {
-        localID := extractLocalID(task.Frontmatter.Title)
+        localID := task.TaskID()
         idMap[localID] = task.Frontmatter.JiraNumber
     }
 
-    // Create links
+    // Create links based on jira-dependencies (NOT sync-dependencies)
     for _, task := range d.tasks {
-        if len(task.Frontmatter.Dependencies) == 0 {
+        if len(task.Frontmatter.JiraDependencies) == 0 {
             continue
         }
 
         blockedIssue := task.Frontmatter.JiraNumber
-        for _, depID := range task.Frontmatter.Dependencies {
+        for _, depID := range task.Frontmatter.JiraDependencies {
             blockerIssue, ok := idMap[depID]
             if !ok {
-                return fmt.Errorf("dependency %s not found for %s", depID, task.Frontmatter.Title)
+                return fmt.Errorf("jira-dependency %s not found for %s", depID, task.Frontmatter.Title)
             }
 
             // Create "blocks" link: blockerIssue blocks blockedIssue
@@ -1198,6 +1389,8 @@ func (d *DependencyLinker) Link(ctx context.Context) error {
             if _, err := d.jiraClient.Issue.AddLink(link); err != nil {
                 return fmt.Errorf("link %s -> %s: %w", blockerIssue, blockedIssue, err)
             }
+
+            color.Green("✓ %s blocked by %s", blockedIssue, blockerIssue)
         }
 
         // Update status
@@ -1460,7 +1653,8 @@ end-date: 2026-01-23
 jira-url: "https://company.atlassian.net/browse/GUARD-101"
 sync-status: linked
 parent: GUARD-100
-dependencies: []
+sync-dependencies: []
+jira-dependencies: []
 content-hash: "a1b2c3d4e5f6..."
 ---
 
@@ -1481,14 +1675,28 @@ This becomes the Jira ticket description field.
 | `jira-url` | string | Full URL to Jira issue | jira-sync sync |
 | `sync-status` | string | Sync state: pending, created, linked | jira-sync sync |
 | `parent` | string | Parent epic/story key | Manual/create |
-| `dependencies` | array | List of task IDs this depends on | Manual/create |
+| `sync-dependencies` | array | Task IDs that must be created BEFORE this task (creation order) | Manual/create |
+| `jira-dependencies` | array | Task IDs this task is blocked by (creates Jira links) | Manual/create |
 | `content-hash` | string | SHA256 hash of entire file (for change detection) | jira-sync sync |
+
+### Dependency Types
+
+**`sync-dependencies`** - Controls ticket creation order
+- Tasks listed here must be created in Jira before this task
+- Uses topological sort to determine order
+- Does NOT create links in Jira
+
+**`jira-dependencies`** - Creates Jira "blocks" links
+- Creates "X blocks Y" links in Jira after tickets are created
+- Does NOT affect creation order
+
+Most tasks will have the same values for both fields. Use `--deps` shorthand to set both.
 
 ### Sync Status Values
 
 - `pending` - Task file exists, not yet created in Jira
-- `created` - Ticket created in Jira, dependencies not linked
-- `linked` - Ticket created and all dependencies linked
+- `created` - Ticket created in Jira, jira-dependencies not linked
+- `linked` - Ticket created and all jira-dependencies linked
 
 ### Task ID Prefixes
 
@@ -1506,15 +1714,20 @@ Tasks use technology-area prefixes for easy identification:
 
 ### Dependencies Format
 
-Dependencies are specified as an array of task IDs:
+Dependencies are specified as arrays of task IDs:
 
 ```yaml
-dependencies:
+# Both sync and jira dependencies (most common case)
+sync-dependencies:
+  - KB-3
+jira-dependencies:
   - KB-3
   - ERR-1
 ```
 
-This means the current task is **blocked by** KB-3 and ERR-1 (they must complete first).
+This means:
+- KB-3 must be created in Jira BEFORE this task (sync-dependency)
+- Both KB-3 and ERR-1 will have "blocks" links to this task in Jira (jira-dependencies)
 
 ## CLI Commands
 
@@ -1527,12 +1740,20 @@ jira-sync create \
   --parent GUARD-100 \
   --description "Initialize the kubebuilder project"
 
-# Task with dependencies and acceptance criteria
+# Task with both sync and jira deps set to same value (shorthand)
 jira-sync create \
   --title "CTRL-1: Controller Scaffold" \
   --parent GUARD-100 \
   --description "Create the basic controller structure. Controller compiles and runs." \
-  --dependencies "KB-3,ERR-1"
+  --deps "KB-3,ERR-1"
+
+# Task with different sync and jira dependencies
+jira-sync create \
+  --title "ERR-5: Implement Pod Listing" \
+  --parent GUARD-100 \
+  --description "List pods by deployment." \
+  --sync-deps "KB-3" \
+  --jira-deps "KB-3,ERR-1"
 ```
 
 ### Sync with Jira
@@ -2033,6 +2254,102 @@ func TestJiraClient_CreateIssue_Integration(t *testing.T) {
 
 ---
 
+### Phase 4.5: Topological Sort (for sync-dependencies)
+
+#### 4.5.1 Topological Sort Implementation
+
+**RED: Write failing tests**
+```go
+func TestTopologicalSort_SimpleChain(t *testing.T) {
+    // KB-1 -> KB-2 -> KB-3
+    tasks := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "KB-3: Third", SyncDependencies: []string{"KB-2"}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}}},
+    }
+
+    sorted, err := sync.TopologicalSort(tasks, tasks)
+
+    require.NoError(t, err)
+    assert.Equal(t, "KB-1", sorted[0].TaskID())
+    assert.Equal(t, "KB-2", sorted[1].TaskID())
+    assert.Equal(t, "KB-3", sorted[2].TaskID())
+}
+
+func TestTopologicalSort_MultipleDependencies(t *testing.T) {
+    // CTRL-1 depends on both KB-3 and ERR-1
+    tasks := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "CTRL-1: Controller", SyncDependencies: []string{"KB-3", "ERR-1"}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-3: Types", SyncDependencies: []string{}}},
+        {Frontmatter: domain.Frontmatter{Title: "ERR-1: Detector", SyncDependencies: []string{}}},
+    }
+
+    sorted, err := sync.TopologicalSort(tasks, tasks)
+
+    require.NoError(t, err)
+    // CTRL-1 must be last
+    assert.Equal(t, "CTRL-1", sorted[2].TaskID())
+    // KB-3 and ERR-1 can be in either order (both have no deps)
+}
+
+func TestTopologicalSort_CircularDependency(t *testing.T) {
+    // KB-1 -> KB-2 -> KB-1 (circular!)
+    tasks := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{"KB-2"}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}}},
+    }
+
+    _, err := sync.TopologicalSort(tasks, tasks)
+
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "circular")
+}
+
+func TestTopologicalSort_DependencyAlreadyCreated(t *testing.T) {
+    // KB-2 depends on KB-1, but KB-1 is already created (not in pending list)
+    pending := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}}},
+    }
+    allTasks := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncStatus: "created", JiraNumber: "GUARD-101"}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}}},
+    }
+
+    sorted, err := sync.TopologicalSort(pending, allTasks)
+
+    require.NoError(t, err)
+    // KB-2 can be created immediately since KB-1 already exists
+    assert.Len(t, sorted, 1)
+    assert.Equal(t, "KB-2", sorted[0].TaskID())
+}
+
+func TestTopologicalSort_NoDependencies(t *testing.T) {
+    tasks := []*domain.TaskFile{
+        {Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{}}},
+        {Frontmatter: domain.Frontmatter{Title: "KB-3: Third", SyncDependencies: []string{}}},
+    }
+
+    sorted, err := sync.TopologicalSort(tasks, tasks)
+
+    require.NoError(t, err)
+    assert.Len(t, sorted, 3)
+    // Order doesn't matter when there are no dependencies
+}
+```
+
+**GREEN: Implement topological sort**
+- [ ] Implement `internal/sync/toposort.go`
+- [ ] Use Kahn's algorithm for topological sort
+- [ ] Detect circular dependencies
+- [ ] Handle partially created dependencies (some tasks already in Jira)
+
+**REFACTOR**
+- [ ] Add descriptive error messages showing the cycle
+- [ ] Optimize for large task sets
+
+---
+
 ### Phase 5: Sync Service (Business Logic)
 
 #### 5.1 Task Categorization
@@ -2135,26 +2452,26 @@ func TestSyncService_CreateTickets_JiraError(t *testing.T) {
 - [ ] Implement CreateTickets method
 - [ ] Call Jira API, update task file, save
 
-#### 5.3 Link Dependencies Flow
+#### 5.3 Link Jira Dependencies Flow
 
 **RED: Write failing tests**
 ```go
-func TestSyncService_LinkDependencies(t *testing.T) {
+func TestSyncService_LinkJiraDependencies(t *testing.T) {
     tasks := []*domain.TaskFile{
         {
             Frontmatter: domain.Frontmatter{
-                Title:        "KB-1: First",
-                JiraNumber:   "GUARD-101",
-                SyncStatus:   "created",
-                Dependencies: []string{},
+                Title:            "KB-1: First",
+                JiraNumber:       "GUARD-101",
+                SyncStatus:       "created",
+                JiraDependencies: []string{},
             },
         },
         {
             Frontmatter: domain.Frontmatter{
-                Title:        "KB-2: Second",
-                JiraNumber:   "GUARD-102",
-                SyncStatus:   "created",
-                Dependencies: []string{"KB-1"},
+                Title:            "KB-2: Second",
+                JiraNumber:       "GUARD-102",
+                SyncStatus:       "created",
+                JiraDependencies: []string{"KB-1"},
             },
         },
     }
@@ -2163,7 +2480,7 @@ func TestSyncService_LinkDependencies(t *testing.T) {
     mockRepo := &MockTaskRepository{}
 
     svc := NewSyncService(mockRepo, mockJira, nil, nil)
-    err := svc.LinkDependencies(context.Background(), tasks)
+    err := svc.LinkJiraDependencies(context.Background(), tasks)
 
     require.NoError(t, err)
 
@@ -2176,15 +2493,50 @@ func TestSyncService_LinkDependencies(t *testing.T) {
     assert.Len(t, mockRepo.WriteTaskCalls, 2)
 }
 
-func TestSyncService_LinkDependencies_ResolvesTaskIDs(t *testing.T) {
-    // Test that "KB-1" in dependencies resolves to "GUARD-101"
+func TestSyncService_LinkJiraDependencies_ResolvesTaskIDs(t *testing.T) {
+    // Test that "KB-1" in jira-dependencies resolves to "GUARD-101"
     // ...
+}
+
+func TestSyncService_LinkJiraDependencies_IgnoresSyncDeps(t *testing.T) {
+    // Verify that sync-dependencies do NOT create Jira links
+    tasks := []*domain.TaskFile{
+        {
+            Frontmatter: domain.Frontmatter{
+                Title:            "KB-1: First",
+                JiraNumber:       "GUARD-101",
+                SyncStatus:       "created",
+                SyncDependencies: []string{},
+                JiraDependencies: []string{},
+            },
+        },
+        {
+            Frontmatter: domain.Frontmatter{
+                Title:            "KB-2: Second",
+                JiraNumber:       "GUARD-102",
+                SyncStatus:       "created",
+                SyncDependencies: []string{"KB-1"}, // Only sync dep, no jira dep
+                JiraDependencies: []string{},
+            },
+        },
+    }
+
+    mockJira := &MockJiraClient{}
+    mockRepo := &MockTaskRepository{}
+
+    svc := NewSyncService(mockRepo, mockJira, nil, nil)
+    err := svc.LinkJiraDependencies(context.Background(), tasks)
+
+    require.NoError(t, err)
+
+    // No Jira links should be created (sync-deps don't create links)
+    assert.Len(t, mockJira.CreateLinkCalls, 0)
 }
 ```
 
-**GREEN: Implement link dependencies**
+**GREEN: Implement link jira-dependencies**
 - [ ] Build task ID → Jira key map
-- [ ] Create links for each dependency
+- [ ] Create links for each jira-dependency (NOT sync-dependency)
 - [ ] Update sync-status to linked
 
 #### 5.4 Update Modified Tickets Flow
@@ -2416,7 +2768,7 @@ func TestE2E_CreateAndSync(t *testing.T) {
 
 #### Phase 1: Project Setup
 - [ ] 1.1 Initialize Go module
-- [ ] 1.2 Create domain types
+- [ ] 1.2 Create domain types (with SyncDependencies and JiraDependencies)
 
 #### Phase 2: Task Repository
 - [ ] 2.1 Parser - RED/GREEN/REFACTOR
@@ -2424,21 +2776,24 @@ func TestE2E_CreateAndSync(t *testing.T) {
 - [ ] 2.3 Repository - RED/GREEN/REFACTOR
 
 #### Phase 3: Hash Computer
-- [ ] 3.1 SHA256 hash - RED/GREEN/REFACTOR
+- [ ] 3.1 SHA256 hash - RED/GREEN/REFACTOR (hash includes jira-deps, excludes sync-deps)
 
 #### Phase 4: Jira Client
 - [ ] 4.1 Mock client
 - [ ] 4.2 Real client - RED/GREEN/REFACTOR
 
+#### Phase 4.5: Topological Sort
+- [ ] 4.5.1 Topological sort for sync-dependencies - RED/GREEN/REFACTOR
+
 #### Phase 5: Sync Service
 - [ ] 5.1 Task categorization - RED/GREEN/REFACTOR
-- [ ] 5.2 Create tickets - RED/GREEN/REFACTOR
-- [ ] 5.3 Link dependencies - RED/GREEN/REFACTOR
+- [ ] 5.2 Create tickets (in topological order) - RED/GREEN/REFACTOR
+- [ ] 5.3 Link jira-dependencies (NOT sync-dependencies) - RED/GREEN/REFACTOR
 - [ ] 5.4 Update modified - RED/GREEN/REFACTOR
 
 #### Phase 6: CLI Commands
-- [ ] 6.1 Create command - RED/GREEN/REFACTOR
-- [ ] 6.2 Sync command - RED/GREEN/REFACTOR
+- [ ] 6.1 Create command (with --sync-deps, --jira-deps, --deps flags) - RED/GREEN/REFACTOR
+- [ ] 6.2 Sync command (with topological sort) - RED/GREEN/REFACTOR
 
 #### Phase 7: Configuration
 - [ ] 7.1 Config loading - RED/GREEN/REFACTOR
@@ -2453,22 +2808,24 @@ func TestE2E_CreateAndSync(t *testing.T) {
 ```
 Phase 1 (Domain Types)
     ↓
-Phase 2 (Task Repository) ←──────┐
-    ↓                            │
-Phase 3 (Hash Computer)          │
-    ↓                            │
-Phase 4 (Jira Client - Mock) ────┤
-    ↓                            │
-Phase 5 (Sync Service) ──────────┤
-    ↓                            │
-Phase 6 (CLI Commands) ──────────┘
+Phase 2 (Task Repository) ←──────────┐
+    ↓                                │
+Phase 3 (Hash Computer)              │
+    ↓                                │
+Phase 4 (Jira Client - Mock) ────────┤
+    ↓                                │
+Phase 4.5 (Topological Sort) ────────┤
+    ↓                                │
+Phase 5 (Sync Service) ──────────────┤
+    ↓                                │
+Phase 6 (CLI Commands) ──────────────┘
     ↓
 Phase 7 (Configuration)
     ↓
 Phase 8 (Integration Tests)
 ```
 
-Phases 2, 3, and 4 (Mock) can be developed in parallel.
-Phase 5 requires 2, 3, and 4 (Mock).
+Phases 2, 3, 4 (Mock), and 4.5 can be developed in parallel.
+Phase 5 requires 2, 3, 4 (Mock), and 4.5.
 Phase 6 requires 5.
 Phase 4 (Real) can be developed alongside Phase 5.
