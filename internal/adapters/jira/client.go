@@ -3,11 +3,25 @@ package jira
 import (
 	"context"
 	"fmt"
+	"io"
 
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 )
+
+// readResponseBody reads and returns the response body for error reporting.
+func readResponseBody(resp *jira.Response) string {
+	if resp == nil || resp.Body == nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Sprintf("(failed to read body: %v)", err)
+	}
+	return string(body)
+}
 
 // Client wraps the go-jira client with our configuration.
 type Client struct {
@@ -61,7 +75,8 @@ func (c *Client) CreateIssue(ctx context.Context, req ports.CreateIssueRequest) 
 	created, resp, err := c.client.Issue.CreateWithContext(ctx, issue)
 	if err != nil {
 		if resp != nil {
-			return nil, fmt.Errorf("%w (status: %d): %w", domain.ErrJiraCreateFailed, resp.StatusCode, err)
+			body := readResponseBody(resp)
+			return nil, fmt.Errorf("%w (status: %d): %s: %w", domain.ErrJiraCreateFailed, resp.StatusCode, body, err)
 		}
 		return nil, fmt.Errorf("%w: %w", domain.ErrJiraCreateFailed, err)
 	}
@@ -87,7 +102,8 @@ func (c *Client) UpdateIssue(ctx context.Context, key string, req ports.UpdateIs
 	_, resp, err := c.client.Issue.UpdateWithContext(ctx, issue)
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("%w (status: %d): %w", domain.ErrJiraUpdateFailed, resp.StatusCode, err)
+			body := readResponseBody(resp)
+			return fmt.Errorf("%w (status: %d): %s: %w", domain.ErrJiraUpdateFailed, resp.StatusCode, body, err)
 		}
 		return fmt.Errorf("%w: %w", domain.ErrJiraUpdateFailed, err)
 	}
@@ -113,7 +129,8 @@ func (c *Client) CreateLink(ctx context.Context, inward, outward, linkType strin
 	resp, err := c.client.Issue.AddLinkWithContext(ctx, link)
 	if err != nil {
 		if resp != nil {
-			return fmt.Errorf("%w (status: %d): %w", domain.ErrJiraLinkFailed, resp.StatusCode, err)
+			body := readResponseBody(resp)
+			return fmt.Errorf("%w (status: %d): %s: %w", domain.ErrJiraLinkFailed, resp.StatusCode, body, err)
 		}
 		return fmt.Errorf("%w: %w", domain.ErrJiraLinkFailed, err)
 	}
@@ -126,7 +143,8 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 	issue, resp, err := c.client.Issue.GetWithContext(ctx, key, nil)
 	if err != nil {
 		if resp != nil {
-			return nil, fmt.Errorf("get issue %s (status: %d): %w", key, resp.StatusCode, err)
+			body := readResponseBody(resp)
+			return nil, fmt.Errorf("get issue %s (status: %d): %s: %w", key, resp.StatusCode, body, err)
 		}
 		return nil, fmt.Errorf("get issue %s: %w", key, err)
 	}
