@@ -17,14 +17,18 @@ func TestTaskRepository_ReadTask(t *testing.T) {
 	content := `---
 title: "KB-1: Test"
 jira-number: ""
+jira-project: GUARD
+jira-state: Todo
 created-date: "2026-01-16"
 start-date: ""
 end-date: ""
 jira-url: ""
 sync-status: pending
-parent: GUARD-100
-dependencies: []
+jira-parent: GUARD-100
+sync-dependencies: []
+jira-dependencies: []
 content-hash: ""
+last-synced: ""
 ---
 
 Description`
@@ -38,7 +42,9 @@ Description`
 	require.NoError(t, err)
 	assert.Equal(t, "KB-1: Test", task.Frontmatter.Title)
 	assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
-	assert.Equal(t, "GUARD-100", task.Frontmatter.Parent)
+	assert.Equal(t, "GUARD-100", task.Frontmatter.JiraParent)
+	assert.Equal(t, "GUARD", task.Frontmatter.JiraProject)
+	assert.Equal(t, "Todo", task.Frontmatter.JiraState)
 	assert.Equal(t, "Description", task.Description)
 }
 
@@ -54,16 +60,20 @@ func TestTaskRepository_WriteTask(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: filepath.Join(tmpDir, "test.md"),
 		Frontmatter: domain.Frontmatter{
-			Title:        "KB-1: Test",
-			JiraNumber:   "",
-			CreatedDate:  "2026-01-16",
-			StartDate:    "",
-			EndDate:      "",
-			JiraURL:      "",
-			SyncStatus:   "pending",
-			Parent:       "GUARD-100",
-			Dependencies: []string{},
-			ContentHash:  "",
+			Title:            "KB-1: Test",
+			JiraNumber:       "",
+			JiraProject:      "GUARD",
+			JiraState:        "Todo",
+			CreatedDate:      "2026-01-16",
+			StartDate:        "",
+			EndDate:          "",
+			JiraURL:          "",
+			SyncStatus:       "pending",
+			JiraParent:       "GUARD-100",
+			SyncDependencies: []string{},
+			JiraDependencies: []string{},
+			ContentHash:      "",
+			LastSynced:       "",
 		},
 		Description: "Test description",
 	}
@@ -87,9 +97,11 @@ func TestTaskRepository_WriteTask_CreatesDirectory(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: nestedPath,
 		Frontmatter: domain.Frontmatter{
-			Title:      "KB-1: Test",
-			SyncStatus: "pending",
-			Parent:     "GUARD-100",
+			Title:       "KB-1: Test",
+			JiraProject: "GUARD",
+			JiraState:   "Todo",
+			SyncStatus:  "pending",
+			JiraParent:  "GUARD-100",
 		},
 		Description: "Test",
 	}
@@ -108,14 +120,18 @@ func TestTaskRepository_ListTasks(t *testing.T) {
 		content := fmt.Sprintf(`---
 title: "TASK-%d: Task %d"
 jira-number: ""
+jira-project: GUARD
+jira-state: Todo
 created-date: "2026-01-16"
 start-date: ""
 end-date: ""
 jira-url: ""
 sync-status: pending
-parent: GUARD-100
-dependencies: []
+jira-parent: GUARD-100
+sync-dependencies: []
+jira-dependencies: []
 content-hash: ""
+last-synced: ""
 ---
 
 Description %d`, idx, idx, idx)
@@ -137,9 +153,12 @@ func TestTaskRepository_ListTasks_IgnoresNonMarkdown(t *testing.T) {
 	// Create a valid task file
 	validContent := `---
 title: "KB-1: Test"
+jira-project: GUARD
+jira-state: Todo
 sync-status: pending
-parent: GUARD-100
-dependencies: []
+jira-parent: GUARD-100
+sync-dependencies: []
+jira-dependencies: []
 content-hash: ""
 ---
 
@@ -208,16 +227,20 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	original := &domain.TaskFile{
 		Path: filepath.Join(tmpDir, repo.GenerateFilename()),
 		Frontmatter: domain.Frontmatter{
-			Title:        "ERR-5: Complex Task",
-			JiraNumber:   "GUARD-999",
-			CreatedDate:  "2026-01-16",
-			StartDate:    "2026-01-16",
-			EndDate:      "2026-01-23",
-			JiraURL:      "https://test.atlassian.net/browse/GUARD-999",
-			SyncStatus:   "linked",
-			Parent:       "GUARD-100",
-			Dependencies: []string{"KB-1", "KB-2", "ERR-1"},
-			ContentHash:  "somehash123",
+			Title:            "ERR-5: Complex Task",
+			JiraNumber:       "GUARD-999",
+			JiraProject:      "GUARD",
+			JiraState:        "In Progress",
+			CreatedDate:      "2026-01-16",
+			StartDate:        "2026-01-16",
+			EndDate:          "2026-01-23",
+			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
+			SyncStatus:       "linked",
+			JiraParent:       "GUARD-100",
+			SyncDependencies: []string{"KB-1", "KB-2"},
+			JiraDependencies: []string{"KB-1", "KB-2", "ERR-1"},
+			ContentHash:      "somehash123",
+			LastSynced:       "2026-01-16T10:00:00Z",
 		},
 		Description: `Implement pod listing logic.
 
@@ -239,13 +262,17 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	// Verify all fields
 	assert.Equal(t, original.Frontmatter.Title, loaded.Frontmatter.Title)
 	assert.Equal(t, original.Frontmatter.JiraNumber, loaded.Frontmatter.JiraNumber)
+	assert.Equal(t, original.Frontmatter.JiraProject, loaded.Frontmatter.JiraProject)
+	assert.Equal(t, original.Frontmatter.JiraState, loaded.Frontmatter.JiraState)
 	assert.Equal(t, original.Frontmatter.CreatedDate, loaded.Frontmatter.CreatedDate)
 	assert.Equal(t, original.Frontmatter.StartDate, loaded.Frontmatter.StartDate)
 	assert.Equal(t, original.Frontmatter.EndDate, loaded.Frontmatter.EndDate)
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
-	assert.Equal(t, original.Frontmatter.Parent, loaded.Frontmatter.Parent)
-	assert.Equal(t, original.Frontmatter.Dependencies, loaded.Frontmatter.Dependencies)
+	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)
+	assert.Equal(t, original.Frontmatter.SyncDependencies, loaded.Frontmatter.SyncDependencies)
+	assert.Equal(t, original.Frontmatter.JiraDependencies, loaded.Frontmatter.JiraDependencies)
 	assert.Equal(t, original.Frontmatter.ContentHash, loaded.Frontmatter.ContentHash)
+	assert.Equal(t, original.Frontmatter.LastSynced, loaded.Frontmatter.LastSynced)
 	assert.Equal(t, original.Description, loaded.Description)
 }

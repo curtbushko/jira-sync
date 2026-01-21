@@ -39,8 +39,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 			Frontmatter: domain.Frontmatter{
 				Title:        "KB-1: Initialize Project",
 				SyncStatus:   domain.SyncStatusPending,
-				Parent:       "GUARD-100",
-				Dependencies: []string{},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
 			},
 			Description: "Initialize the project repository.",
 		},
@@ -49,8 +49,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 			Frontmatter: domain.Frontmatter{
 				Title:        "KB-2: Create Types",
 				SyncStatus:   domain.SyncStatusPending,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"},
 			},
 			Description: "Create shared type definitions.",
 		},
@@ -59,8 +59,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 			Frontmatter: domain.Frontmatter{
 				Title:        "ERR-1: Detector Stub",
 				SyncStatus:   domain.SyncStatusPending,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"},
 			},
 			Description: "Create detector stub implementation.",
 		},
@@ -69,8 +69,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 			Frontmatter: domain.Frontmatter{
 				Title:        "CTRL-1: Controller Scaffold",
 				SyncStatus:   domain.SyncStatusPending,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-2", "ERR-1"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-2", "ERR-1"},
 			},
 			Description: "Create controller scaffold.",
 		},
@@ -189,8 +189,8 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				Title:        "KB-1: First",
 				JiraNumber:   "GUARD-101",
 				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
 			},
 		},
 		{
@@ -199,8 +199,8 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				Title:        "KB-2: Second",
 				JiraNumber:   "GUARD-102",
 				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"},
 			},
 		},
 		{
@@ -209,8 +209,8 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				Title:        "KB-3: Third",
 				JiraNumber:   "GUARD-103",
 				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"},
 			},
 		},
 		{
@@ -219,8 +219,8 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				Title:        "KB-4: Fourth",
 				JiraNumber:   "GUARD-104",
 				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-2", "KB-3"},
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-2", "KB-3"},
 			},
 		},
 	}
@@ -263,8 +263,8 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 			EndDate:      "2026-01-23",
 			JiraURL:      "https://test.atlassian.net/browse/GUARD-999",
 			SyncStatus:   domain.SyncStatusLinked,
-			Parent:       "GUARD-100",
-			Dependencies: []string{"KB-1", "KB-2", "ERR-1"},
+			JiraParent:       "GUARD-100",
+			JiraDependencies: []string{"KB-1", "KB-2", "ERR-1"},
 			ContentHash:  "somehash123",
 		},
 		Description: `Implement pod listing logic.
@@ -292,8 +292,8 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.EndDate, loaded.Frontmatter.EndDate)
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
-	assert.Equal(t, original.Frontmatter.Parent, loaded.Frontmatter.Parent)
-	assert.Equal(t, original.Frontmatter.Dependencies, loaded.Frontmatter.Dependencies)
+	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)
+	assert.Equal(t, original.Frontmatter.JiraDependencies, loaded.Frontmatter.JiraDependencies)
 	assert.Equal(t, original.Frontmatter.ContentHash, loaded.Frontmatter.ContentHash)
 	assert.Equal(t, original.Description, loaded.Description)
 }

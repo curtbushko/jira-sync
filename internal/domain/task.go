@@ -10,17 +10,20 @@ type TaskFile struct {
 
 // Frontmatter contains the YAML frontmatter fields of a task file.
 type Frontmatter struct {
-	Title        string   `yaml:"title"`
-	Project      string   `yaml:"project,omitempty"`
-	JiraNumber   string   `yaml:"jira-number"`
-	CreatedDate  string   `yaml:"created-date"`
-	StartDate    string   `yaml:"start-date"`
-	EndDate      string   `yaml:"end-date"`
-	JiraURL      string   `yaml:"jira-url"`
-	SyncStatus   string   `yaml:"sync-status"`
-	Parent       string   `yaml:"parent"`
-	Dependencies []string `yaml:"dependencies"`
-	ContentHash  string   `yaml:"content-hash"`
+	Title            string   `yaml:"title"`
+	JiraNumber       string   `yaml:"jira-number"`
+	JiraProject      string   `yaml:"jira-project"`
+	JiraState        string   `yaml:"jira-state"`
+	CreatedDate      string   `yaml:"created-date"`
+	StartDate        string   `yaml:"start-date"`
+	EndDate          string   `yaml:"end-date"`
+	JiraURL          string   `yaml:"jira-url"`
+	SyncStatus       string   `yaml:"sync-status"`
+	JiraParent       string   `yaml:"jira-parent"`
+	SyncDependencies []string `yaml:"sync-dependencies"`
+	JiraDependencies []string `yaml:"jira-dependencies"`
+	ContentHash      string   `yaml:"content-hash"`
+	LastSynced       string   `yaml:"last-synced"`
 }
 
 // TaskID extracts the task ID prefix from the title (e.g., "KB-1" from "KB-1: Title").

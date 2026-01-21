@@ -23,8 +23,8 @@ This command generates a task file that can later be synced to Jira.
 Designed for easy use by Claude when generating tickets.
 
 Example:
-  jira-sync create --title "KB-1: Initialize Project" --parent GUARD-100 --description "Initialize kubebuilder"
-  jira-sync create -t "ERR-1: Detector Stub" -p GUARD-100 -d "Create stub" --dependencies "KB-3"`,
+  jira-sync create --title "KB-1: Initialize Project" --jira-parent GUARD-100 --description "Initialize kubebuilder"
+  jira-sync create -t "ERR-1: Detector Stub" -p GUARD-100 -d "Create stub" --deps "KB-3"`,
 	RunE: runCreate,
 }
 
@@ -33,31 +33,27 @@ func init() {
 
 	// Required flags
 	createCmd.Flags().StringP("title", "t", "", "Task ID and title (e.g., 'KB-1: Initialize Project')")
-	createCmd.Flags().StringP("parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
+	createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
 	createCmd.Flags().StringP("description", "d", "", "Task description including acceptance criteria (becomes Jira description)")
 
 	// Optional flags
-	createCmd.Flags().String("dependencies", "", "Comma-separated task IDs (e.g., 'KB-1,ERR-1')")
+	createCmd.Flags().String("jira-project", "", "Jira project key (e.g., 'GUARD')")
+	createCmd.Flags().String("sync-deps", "", "Comma-separated task IDs for creation ordering (e.g., 'KB-1,ERR-1')")
+	createCmd.Flags().String("jira-deps", "", "Comma-separated task IDs for Jira 'blocks' links (e.g., 'KB-1,ERR-1')")
+	createCmd.Flags().String("deps", "", "Shorthand: sets BOTH sync-deps and jira-deps to the same value")
 	createCmd.Flags().StringP("output", "o", "./tasks", "Output directory for task files")
 
 	// Mark required - errors ignored as flags are defined above
 	_ = createCmd.MarkFlagRequired("title")
-	_ = createCmd.MarkFlagRequired("parent")
+	_ = createCmd.MarkFlagRequired("jira-parent")
 	_ = createCmd.MarkFlagRequired("description")
 
 	// Bind output to viper for config file support
 	_ = viper.BindPFlag("defaults.output_dir", createCmd.Flags().Lookup("output"))
 }
 
-func runCreate(cmd *cobra.Command, _ []string) error {
-	// Get flag values
-	title, _ := cmd.Flags().GetString("title")
-	parent, _ := cmd.Flags().GetString("parent")
-	description, _ := cmd.Flags().GetString("description")
-	depsStr, _ := cmd.Flags().GetString("dependencies")
-	outputDir, _ := cmd.Flags().GetString("output")
-
-	// Parse dependencies
+// parseDeps parses a comma-separated dependency string into a slice
+func parseDeps(depsStr string) []string {
 	var deps []string
 	if depsStr != "" {
 		for _, d := range strings.Split(depsStr, ",") {
@@ -66,6 +62,30 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 				deps = append(deps, d)
 			}
 		}
+	}
+	return deps
+}
+
+func runCreate(cmd *cobra.Command, _ []string) error {
+	// Get flag values
+	title, _ := cmd.Flags().GetString("title")
+	jiraParent, _ := cmd.Flags().GetString("jira-parent")
+	description, _ := cmd.Flags().GetString("description")
+	jiraProject, _ := cmd.Flags().GetString("jira-project")
+	syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
+	jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
+	depsStr, _ := cmd.Flags().GetString("deps")
+	outputDir, _ := cmd.Flags().GetString("output")
+
+	// Parse dependencies
+	// If --deps is set, use it for both; otherwise use individual flags
+	var syncDeps, jiraDeps []string
+	if depsStr != "" {
+		syncDeps = parseDeps(depsStr)
+		jiraDeps = parseDeps(depsStr)
+	} else {
+		syncDeps = parseDeps(syncDepsStr)
+		jiraDeps = parseDeps(jiraDepsStr)
 	}
 
 	// Ensure output directory exists
@@ -91,16 +111,20 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	task := &domain.TaskFile{
 		Path: filePath,
 		Frontmatter: domain.Frontmatter{
-			Title:        title,
-			JiraNumber:   "",
-			CreatedDate:  now.Format("2006-01-02"),
-			StartDate:    "",
-			EndDate:      "",
-			JiraURL:      "",
-			SyncStatus:   domain.SyncStatusPending,
-			Parent:       parent,
-			Dependencies: deps,
-			ContentHash:  "",
+			Title:            title,
+			JiraNumber:       "",
+			JiraProject:      jiraProject,
+			JiraState:        domain.DefaultJiraState,
+			CreatedDate:      now.Format("2006-01-02"),
+			StartDate:        "",
+			EndDate:          "",
+			JiraURL:          "",
+			SyncStatus:       domain.SyncStatusPending,
+			JiraParent:       jiraParent,
+			SyncDependencies: syncDeps,
+			JiraDependencies: jiraDeps,
+			ContentHash:      "",
+			LastSynced:       "",
 		},
 		Description: description,
 	}
@@ -112,9 +136,15 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 
 	color.Green("✓ Created: %s", filePath)
 	fmt.Printf("  Title: %s\n", title)
-	fmt.Printf("  Parent: %s\n", parent)
-	if len(deps) > 0 {
-		fmt.Printf("  Dependencies: %s\n", strings.Join(deps, ", "))
+	fmt.Printf("  Jira-Parent: %s\n", jiraParent)
+	if jiraProject != "" {
+		fmt.Printf("  Jira-Project: %s\n", jiraProject)
+	}
+	if len(syncDeps) > 0 {
+		fmt.Printf("  Sync-Dependencies: %s\n", strings.Join(syncDeps, ", "))
+	}
+	if len(jiraDeps) > 0 {
+		fmt.Printf("  Jira-Dependencies: %s\n", strings.Join(jiraDeps, ", "))
 	}
 
 	return nil

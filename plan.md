@@ -44,7 +44,9 @@ jira-sync/
 ├── cmd/
 │   ├── root.go               # Cobra root command + Viper config
 │   ├── create.go             # create command (generates .md task files)
-│   └── sync.go               # sync command (syncs with Jira)
+│   ├── sync.go               # sync command (syncs with Jira)
+│   ├── fullsync.go           # full-sync command (bidirectional sync)
+│   └── migrate.go            # migrate command (adds missing frontmatter fields)
 ├── internal/
 │   ├── config/
 │   │   └── config.go         # Viper configuration loading
@@ -74,17 +76,53 @@ Each task will be stored as a markdown file with the following format:
 
 ```markdown
 ---
-title: "KB-1: Kubebuilder - Initialize Project and Repository"
+title: "KB-2: Kubebuilder - Create Shared Types"
 jira-number: ""
+jira-project: GUARD
+jira-state: Todo
 created-date: 2026-01-16
 start-date: 2026-01-16
 end-date: 2026-01-23
 jira-url: ""
 sync-status: pending
-parent: GUARDIAN
+jira-parent: GUARDIAN
+sync-dependencies:
+  - "[KB-1: Initialize Project](20260116-103001.md)"
+jira-dependencies:
+  - "[KB-1: Initialize Project](20260116-103001.md)"
+content-hash: ""
+last-synced: ""
+---
+
+Create shared type definitions that will be used across multiple controllers.
+
+## Acceptance Criteria
+
+- DeploymentError type defined with required fields
+- ErrorType enum with all error categories
+- Unit tests for type validation
+- Documentation comments on all exported types
+```
+
+**Note:** Dependencies use wiki-style markdown links `[Title](filename.md)` for easy navigation in editors like Obsidian and VS Code.
+
+**Example with no dependencies (root task):**
+```markdown
+---
+title: "KB-1: Kubebuilder - Initialize Project and Repository"
+jira-number: ""
+jira-project: GUARD
+jira-state: Todo
+created-date: 2026-01-16
+start-date: 2026-01-16
+end-date: 2026-01-23
+jira-url: ""
+sync-status: pending
+jira-parent: GUARDIAN
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
+last-synced: ""
 ---
 
 Initialize the Kubebuilder project using the CLI tool, create the basic Go module structure, and push to the remote repository. This is the first task that must be completed to unblock all other team members.
@@ -140,15 +178,92 @@ The `content-hash` field stores a SHA256 hash of the **entire file** (frontmatte
 |-------|------|-------------|
 | `title` | string | Task ID and title (e.g., "KB-1: Kubebuilder - Initialize Project") |
 | `jira-number` | string | Jira issue key (populated after creation, e.g., "GUARD-123") |
+| `jira-project` | string | Jira project key for this task (e.g., "GUARD") |
+| `jira-state` | string | Jira ticket state (default: "Todo", e.g., "Todo", "In Progress", "Done") |
 | `created-date` | date | Date the local file was created |
 | `start-date` | date | Date ticket was created in Jira (auto-set on creation) |
 | `end-date` | date | Start date + 7 days (auto-calculated) |
 | `jira-url` | string | Full URL to Jira issue (populated after creation) |
 | `sync-status` | string | Sync state: pending, created, linked (tracks sync with Jira, not ticket status) |
-| `parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100") |
-| `sync-dependencies` | array | Task IDs that must be created BEFORE this task (controls creation order, e.g., ["KB-1"]) |
-| `jira-dependencies` | array | Task IDs this task is blocked by (creates "blocks" links in Jira, e.g., ["KB-1", "ERR-1"]) |
+| `jira-parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100") |
+| `sync-dependencies` | array | Wiki links to tasks that must be created BEFORE this task (controls creation order, e.g., ["[KB-1: Title](20260116-103001.md)"]) |
+| `jira-dependencies` | array | Wiki links to tasks this task is blocked by (creates "blocks" links in Jira, e.g., ["[KB-1: Title](file.md)"]) |
 | `content-hash` | string | SHA256 hash of entire file (used to detect changes needing resync) |
+| `last-synced` | datetime | ISO 8601 timestamp of last successful full-sync (used for conflict detection) |
+
+### Frontmatter Migration (Legacy Task Support)
+
+Older task files may be missing some frontmatter fields that were added in later versions. When parsing task files, `jira-sync` automatically detects and adds missing fields with sensible defaults.
+
+**Missing Field Detection:**
+
+When a task file is parsed, the following fields are checked and added if missing:
+
+| Field | Default Value | Notes |
+|-------|---------------|-------|
+| `jira-number` | `""` | Empty string (not yet created) |
+| `jira-project` | `""` | **Warning**: Must be set manually before sync |
+| `jira-state` | `"Todo"` | Default state for new tickets |
+| `jira-url` | `""` | Empty string (populated on creation) |
+| `sync-status` | `"pending"` | Assumes not yet synced |
+| `sync-dependencies` | `[]` | Empty array |
+| `jira-dependencies` | `[]` | Empty array |
+| `content-hash` | `""` | Empty string (will be computed on sync) |
+| `last-synced` | `""` | Empty string (never synced) |
+
+**Migration Behavior:**
+
+1. **On Parse**: When `ParseTaskFile()` reads a task, it calls `MigrateFrontmatter()` to add any missing fields
+2. **On Write**: The complete frontmatter (with all fields) is written back to the file
+3. **Validation**: If `jira-project` is missing, a warning is displayed during sync (task cannot be created without a project)
+4. **Backwards Compatible**: Existing fields are never modified during migration
+
+**Example Migration:**
+
+Old task file (missing fields):
+```yaml
+---
+title: "KB-1: Initialize Project"
+jira-parent: GUARD-100
+---
+
+Task description here.
+```
+
+After migration:
+```yaml
+---
+title: "KB-1: Initialize Project"
+jira-number: ""
+jira-project: ""
+jira-state: Todo
+created-date: ""
+start-date: ""
+end-date: ""
+jira-url: ""
+sync-status: pending
+jira-parent: GUARD-100
+sync-dependencies: []
+jira-dependencies: []
+content-hash: ""
+last-synced: ""
+---
+
+Task description here.
+```
+
+**CLI Flag for Migration:**
+
+```bash
+# Migrate all task files without syncing
+jira-sync migrate ./tasks/
+
+# Dry run to see what would be migrated
+jira-sync migrate ./tasks/ --dry-run
+
+# Migrate with specific project for tasks missing jira-project
+jira-sync migrate ./tasks/ --default-project GUARD
+```
 
 ### Dependency Types Explained
 
@@ -158,31 +273,77 @@ The two dependency fields serve different purposes:
 - Determines the order in which tickets are created in Jira
 - Uses topological sort to ensure dependencies are created first
 - Does NOT create any links in Jira
-- Example: If `KB-2` has `sync-dependencies: ["KB-1"]`, KB-1's ticket will be created before KB-2's
+- Uses wiki URL format for easy navigation: `[Task Title](filename.md)`
+- Example: If `KB-2` has `sync-dependencies: ["[KB-1: Initialize Project](20260116-103001.md)"]`, KB-1's ticket will be created before KB-2's
 
 **`jira-dependencies`** - Controls Jira ticket linking
 - Creates "blocks" links between Jira tickets after creation
 - The listed tasks "block" the current task (must complete first)
 - Does NOT affect creation order
-- Example: If `KB-2` has `jira-dependencies: ["KB-1"]`, a "GUARD-101 blocks GUARD-102" link is created
+- Uses wiki URL format for easy navigation: `[Task Title](filename.md)`
+- Example: If `KB-2` has `jira-dependencies: ["[KB-1: Initialize Project](20260116-103001.md)"]`, a "GUARD-101 blocks GUARD-102" link is created
+
+### Wiki URL Format for Dependencies
+
+Dependencies use markdown wiki-style links for easy navigation in editors and tools like Obsidian, VS Code, or other markdown viewers.
+
+**Format:** `[Task ID: Title](filename.md)`
+
+**Examples:**
+```yaml
+sync-dependencies:
+  - "[KB-1: Initialize Project](20260116-103001.md)"
+  - "[KB-2: Create Types](20260116-103002.md)"
+jira-dependencies:
+  - "[KB-1: Initialize Project](20260116-103001.md)"
+```
+
+**Benefits:**
+- Clickable links in markdown editors (Obsidian, VS Code, etc.)
+- Easy to see task titles without opening files
+- Compatible with wiki-style navigation tools
+- Task ID is preserved at the start for parsing
+
+**Parsing Logic:**
+- The task ID is extracted from the link text (before the colon)
+- The filename is used to locate the actual task file
+- If the file doesn't exist, a warning is shown during sync
+- Legacy format (plain task IDs like `"KB-1"`) is still supported for backwards compatibility
+
+**Link Resolution:**
+```
+"[KB-1: Initialize Project](20260116-103001.md)"
+  │                          │
+  └─ Task ID: KB-1           └─ File: ./tasks/20260116-103001.md
+```
 
 **Common patterns:**
 
 1. **Same dependencies** - Most tasks will have identical values:
    ```yaml
-   sync-dependencies: ["KB-1"]
-   jira-dependencies: ["KB-1"]
+   sync-dependencies:
+     - "[KB-1: Initialize Project](20260116-103001.md)"
+   jira-dependencies:
+     - "[KB-1: Initialize Project](20260116-103001.md)"
    ```
 
 2. **Sync-only dependency** - Task needs another created first, but no Jira link needed:
    ```yaml
-   sync-dependencies: ["KB-1"]
+   sync-dependencies:
+     - "[KB-1: Initialize Project](20260116-103001.md)"
    jira-dependencies: []
    ```
 
 3. **Jira-only dependency** - Task can be created in any order, but needs Jira link:
    ```yaml
    sync-dependencies: []
+   jira-dependencies:
+     - "[KB-1: Initialize Project](20260116-103001.md)"
+   ```
+
+4. **Legacy format** - Plain task IDs (still supported):
+   ```yaml
+   sync-dependencies: ["KB-1"]
    jira-dependencies: ["KB-1"]
    ```
 
@@ -190,7 +351,7 @@ The two dependency fields serve different purposes:
 
 ## CLI Commands
 
-The CLI has two main commands designed for easy use by both humans and Claude:
+The CLI has four main commands designed for easy use by both humans and Claude:
 
 ### 1. Create Task File
 
@@ -205,8 +366,10 @@ jira-sync create [flags]
 | Flag | Short | Required | Description |
 |------|-------|----------|-------------|
 | `--title` | `-t` | Yes | Task ID and title (e.g., "KB-1: Initialize Project") |
-| `--parent` | `-p` | Yes | Parent epic/story key (e.g., "GUARD-100") |
+| `--jira-parent` | `-p` | Yes | Parent epic/story key (e.g., "GUARD-100") |
+| `--project` | | Yes | Jira project key (e.g., "GUARD") |
 | `--description` | `-d` | Yes | Task description including acceptance criteria (can be multi-line, becomes Jira description) |
+| `--state` | | No | Jira ticket state (default: "Todo") |
 | `--sync-deps` | `-s` | No | Comma-separated task IDs for creation ordering (e.g., "KB-1,ERR-1") |
 | `--jira-deps` | `-j` | No | Comma-separated task IDs for Jira "blocks" links (e.g., "KB-1,ERR-1") |
 | `--deps` | | No | Shorthand: sets BOTH sync-deps and jira-deps to the same value |
@@ -218,20 +381,23 @@ jira-sync create [flags]
 # Simple task with no dependencies
 jira-sync create \
   --title "KB-1: Kubebuilder - Initialize Project and Repository" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --description "Initialize the Kubebuilder project using the CLI tool."
 
 # Task with dependencies (shorthand sets both sync and jira deps)
 jira-sync create \
   --title "CTRL-1: Create Basic Controller Scaffold" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --deps "KB-3,ERR-1" \
   --description "Create the basic Deployment controller structure. Controller compiles and can be instantiated in tests."
 
 # Task with separate sync and jira dependencies
 jira-sync create \
   --title "ERR-5: Implement Pod Listing" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --sync-deps "KB-3" \
   --jira-deps "KB-3,ERR-1" \
   --description "Implement pod listing by deployment."
@@ -239,7 +405,8 @@ jira-sync create \
 # Multi-line description with acceptance criteria using heredoc (for Claude)
 jira-sync create \
   --title "ERR-2: Implement Replica Failure Detection" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --deps "ERR-1" \
   --description "$(cat <<'EOF'
 Implement detection of replica failures by examining the Deployment status.
@@ -263,15 +430,18 @@ Creates a file like `./tasks/20260116-103001.md`:
 ---
 title: "KB-1: Kubebuilder - Initialize Project and Repository"
 jira-number: ""
+jira-project: GUARD
+jira-state: Todo
 created-date: 2026-01-16
 start-date: ""
 end-date: ""
 jira-url: ""
 sync-status: pending
-parent: GUARD-100
+jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
+last-synced: ""
 ---
 
 Initialize the Kubebuilder project using the CLI tool.
@@ -292,32 +462,31 @@ jira-sync sync [tasks-dir] [flags]
 
 | Flag | Short | Required | Description |
 |------|-------|----------|-------------|
-| `--project` | `-p` | Yes* | Jira project key (e.g., "GUARD") |
 | `--dry-run` | | No | Show what would happen without making changes |
 | `--yes` | `-y` | No | Skip confirmation prompts |
 | `--create-only` | | No | Only create tickets, don't link dependencies |
 | `--link-only` | | No | Only link dependencies, don't create tickets |
 | `--status-only` | | No | Only update status from Jira, don't create/link |
 
-*Can be set in config file or `JIRA_DEFAULTS_PROJECT` env var
+Note: The Jira project is read from each task file's `jira-project` frontmatter field.
 
 **Examples:**
 
 ```bash
 # Full sync (create tickets + link dependencies)
-jira-sync sync ./tasks/ --project GUARD
+jira-sync sync ./tasks/
 
 # Dry run to see what would happen
-jira-sync sync ./tasks/ --project GUARD --dry-run
+jira-sync sync ./tasks/ --dry-run
 
 # Skip confirmation prompts (for scripting)
-jira-sync sync ./tasks/ --project GUARD --yes
+jira-sync sync ./tasks/ --yes
 
 # Only create tickets (don't link dependencies yet)
-jira-sync sync ./tasks/ --project GUARD --create-only
+jira-sync sync ./tasks/ --create-only
 
 # Only link dependencies (tickets already created)
-jira-sync sync ./tasks/ --project GUARD --link-only
+jira-sync sync ./tasks/ --link-only
 
 # Only update local files from Jira status
 jira-sync sync ./tasks/ --status-only
@@ -387,6 +556,195 @@ Summary:
   ✓ 47 tasks synced
 ```
 
+### 3. Full Sync (Bidirectional)
+
+The `sync` command is **one-way** (local → Jira) and only handles initial ticket creation and dependency linking. It does NOT keep fields synchronized after creation.
+
+The `full-sync` command provides **bidirectional synchronization** between local task files and Jira tickets, ensuring all fields match.
+
+```bash
+jira-sync full-sync [tasks-dir] [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Required | Description |
+|------|-------|----------|-------------|
+| `--dry-run` | | No | Show what would change without making changes |
+| `--yes` | `-y` | No | Skip confirmation prompts |
+| `--direction` | `-d` | No | Sync direction: `local` (local wins), `jira` (Jira wins), `ask` (prompt for conflicts). Default: `ask` |
+| `--fields` | `-f` | No | Comma-separated fields to sync (default: all). Options: `title`, `description`, `state`, `jira-parent` |
+
+**Fields Synchronized:**
+
+| Local Field | Jira Field | Notes |
+|-------------|------------|-------|
+| `title` | `summary` | Task title |
+| Description (body) | `description` | Markdown body content |
+| `jira-state` | `status` | Ticket status (Todo, In Progress, Done, etc.) |
+| `jira-parent` | `parent` | Parent epic/story |
+| `start-date` | Custom field | Start date |
+| `end-date` | Custom field | End date |
+
+**Examples:**
+
+```bash
+# Full bidirectional sync (prompts on conflicts)
+jira-sync full-sync ./tasks/
+
+# Dry run to see what would change
+jira-sync full-sync ./tasks/ --dry-run
+
+# Local files always win on conflicts
+jira-sync full-sync ./tasks/ --direction local
+
+# Jira always wins on conflicts
+jira-sync full-sync ./tasks/ --direction jira
+
+# Only sync specific fields
+jira-sync full-sync ./tasks/ --fields "title,description,state"
+
+# Skip confirmation prompts
+jira-sync full-sync ./tasks/ --yes
+```
+
+**Full-Sync Workflow:**
+
+```
+1. Parse all task files in directory
+2. Filter to tasks with jira-number (already created in Jira)
+3. For each task:
+   a. Fetch current Jira ticket data
+   b. Compare local fields vs Jira fields
+   c. Detect changes:
+      - Local only changed → update Jira
+      - Jira only changed → update local file
+      - Both changed → CONFLICT
+4. Show summary of changes:
+   - X tasks: local → Jira (local changed)
+   - Y tasks: Jira → local (Jira changed)
+   - Z tasks: CONFLICT (both changed)
+   - W tasks: in sync (no changes)
+5. Handle conflicts based on --direction flag:
+   - ask: prompt user for each conflict
+   - local: local file wins
+   - jira: Jira ticket wins
+6. Prompt for confirmation
+7. Apply changes
+8. Update content-hash in local files
+9. Show final summary
+```
+
+**Conflict Detection:**
+
+Changes are detected by comparing:
+1. **Local changes**: Current file hash vs stored `content-hash`
+2. **Jira changes**: Current Jira `updated` timestamp vs stored `last-synced` timestamp
+
+A conflict occurs when BOTH local file AND Jira ticket have changed since the last sync.
+
+**Output Example:**
+
+```
+Scanning ./tasks/...
+Found 47 task files with Jira tickets
+
+Comparing fields...
+
+Changes detected:
+  Local → Jira (local file changed):
+    - KB-2: description updated
+    - ERR-3: title updated
+
+  Jira → Local (Jira ticket changed):
+    - CTRL-1: status changed (Todo → In Progress)
+    - MET-5: description updated by teammate
+
+  CONFLICTS (both changed):
+    - ERR-7: description differs
+      Local:  "Implement container terminated state..."
+      Jira:   "Updated by PM: Implement container..."
+      [L]ocal wins / [J]ira wins / [S]kip?
+
+  In sync: 42 tasks
+
+Apply 4 changes? [y/N] y
+
+Updating Jira...
+✓ KB-2: description updated
+✓ ERR-3: title updated
+
+Updating local files...
+✓ CTRL-1: status → In Progress
+✓ MET-5: description updated
+
+Summary:
+  ✓ 2 Jira tickets updated
+  ✓ 2 local files updated
+  ✓ 1 conflict resolved (local wins)
+  ✓ 42 tasks already in sync
+```
+
+**New Frontmatter Field:**
+
+The `full-sync` command requires an additional frontmatter field to track when the last sync occurred:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `last-synced` | datetime | ISO 8601 timestamp of last successful full-sync |
+
+Example:
+```yaml
+last-synced: "2026-01-21T10:30:00Z"
+```
+
+### 4. Migrate (Legacy Task Support)
+
+The `migrate` command adds missing frontmatter fields to older task files. This ensures backwards compatibility when new fields are added to the schema.
+
+```bash
+jira-sync migrate [tasks-dir] [flags]
+```
+
+**Flags:**
+
+| Flag | Short | Required | Description |
+|------|-------|----------|-------------|
+| `--dry-run` | | No | Show what would be migrated without making changes |
+| `--default-project` | | No | Default jira-project for tasks missing this field |
+
+**Examples:**
+
+```bash
+# Migrate all task files in the tasks directory
+jira-sync migrate ./tasks/
+
+# Dry run to see what would be migrated
+jira-sync migrate ./tasks/ --dry-run
+
+# Set default project for tasks missing jira-project
+jira-sync migrate ./tasks/ --default-project GUARD
+```
+
+**Output Example:**
+
+```
+Scanning ./tasks/ for tasks needing migration...
+✓ Migrated: KB-1
+✓ Migrated: KB-2
+⚠ ERR-1: missing jira-project (use --default-project to set)
+✓ Migrated: ERR-2
+
+Migration complete: 3 tasks migrated
+1 warnings (missing jira-project)
+```
+
+**When to Use:**
+
+- After upgrading jira-sync to a version with new frontmatter fields
+- When importing task files from another source
+- When manually created task files are missing fields
+
 ---
 
 ## Workflow
@@ -402,20 +760,22 @@ mkdir -p jira/tasks
 # Create individual task files using the CLI
 jira-sync create \
   --title "KB-1: Kubebuilder - Initialize Project and Repository" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --description "Initialize the Kubebuilder project using the CLI tool." \
   --output ./jira/tasks/
 
 jira-sync create \
   --title "KB-2: Kubebuilder - Create Shared Type Definitions" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --description "Create the shared error types and configuration types." \
   --dependencies "KB-1" \
   --output ./jira/tasks/
 
 # Claude can generate many tasks in sequence
-jira-sync create -t "KB-3: Create Shared Interfaces" -p GUARD-100 -d "Create interface definitions" --dependencies "KB-2" -o ./jira/tasks/
-jira-sync create -t "KB-4: Create Mock Implementations" -p GUARD-100 -d "Create mock implementations" --dependencies "KB-3" -o ./jira/tasks/
+jira-sync create -t "KB-3: Create Shared Interfaces" -p GUARD-100 --project GUARD -d "Create interface definitions" --dependencies "KB-2" -o ./jira/tasks/
+jira-sync create -t "KB-4: Create Mock Implementations" -p GUARD-100 --project GUARD -d "Create mock implementations" --dependencies "KB-3" -o ./jira/tasks/
 
 # Verify generated files
 ls jira/tasks/
@@ -448,7 +808,7 @@ export JIRA_USER="user@company.com"
 export JIRA_TOKEN="your-api-token"
 
 # Dry run first to see what will happen
-jira-sync sync ./jira/tasks/ --project GUARD --dry-run
+jira-sync sync ./jira/tasks/ --dry-run
 
 # Output:
 # Scanning ./jira/tasks/...
@@ -462,7 +822,7 @@ jira-sync sync ./jira/tasks/ --project GUARD --dry-run
 # Would create 67 dependency links
 
 # Run the actual sync
-jira-sync sync ./jira/tasks/ --project GUARD
+jira-sync sync ./jira/tasks/
 
 # Output:
 # Scanning ./jira/tasks/...
@@ -498,8 +858,8 @@ Keep local files in sync with Jira status changes.
 jira-sync sync ./jira/tasks/ --status-only
 
 # Add new tasks and sync them
-jira-sync create -t "NEW-1: New Feature" -p GUARD-100 -d "New feature description" -o ./jira/tasks/
-jira-sync sync ./jira/tasks/ --project GUARD
+jira-sync create -t "NEW-1: New Feature" -p GUARD-100 --project GUARD -d "New feature description" -o ./jira/tasks/
+jira-sync sync ./jira/tasks/
 ```
 
 ---
@@ -653,10 +1013,10 @@ type JiraConfig struct {
 
 // DefaultsConfig holds default values for ticket creation
 type DefaultsConfig struct {
-    Project        string
-    IssueType      string
-    StartDateOffset int // days from creation
-    EndDateOffset   int // days from start
+    IssueType       string
+    JiraState       string // default jira-state for new tasks (default: "Todo")
+    StartDateOffset int    // days from creation
+    EndDateOffset   int    // days from start
 }
 
 // LinkTypesConfig holds Jira link type names
@@ -673,8 +1033,8 @@ func Load() (*Config, error) {
             Token: viper.GetString("token"), // JIRA_TOKEN env var
         },
         Defaults: DefaultsConfig{
-            Project:        viper.GetString("defaults.project"),
-            IssueType:      viper.GetString("defaults.issue_type"),
+            IssueType:       viper.GetString("defaults.issue_type"),
+            JiraState:       viper.GetString("defaults.jira_state"),
             StartDateOffset: viper.GetInt("defaults.start_date_offset"),
             EndDateOffset:   viper.GetInt("defaults.end_date_offset"),
         },
@@ -686,6 +1046,9 @@ func Load() (*Config, error) {
     // Apply defaults
     if cfg.Defaults.IssueType == "" {
         cfg.Defaults.IssueType = "Task"
+    }
+    if cfg.Defaults.JiraState == "" {
+        cfg.Defaults.JiraState = "Todo"
     }
     if cfg.Defaults.EndDateOffset == 0 {
         cfg.Defaults.EndDateOffset = 7
@@ -744,7 +1107,7 @@ This command generates a task file that can later be synced to Jira.
 Designed for easy use by Claude when generating tickets.
 
 Example:
-  jira-sync create --title "KB-1: Initialize Project" --parent GUARD-100 --description "Initialize kubebuilder"
+  jira-sync create --title "KB-1: Initialize Project" --jira-parent GUARD-100 --description "Initialize kubebuilder"
   jira-sync create -t "ERR-1: Detector Stub" -p GUARD-100 -d "Create stub" --deps "KB-3"
   jira-sync create -t "ERR-2: Pod Listing" -p GUARD-100 -d "List pods" --sync-deps "KB-3" --jira-deps "KB-3,ERR-1"`,
     RunE: runCreate,
@@ -755,7 +1118,7 @@ func init() {
 
     // Required flags
     createCmd.Flags().StringP("title", "t", "", "Task ID and title (e.g., 'KB-1: Initialize Project')")
-    createCmd.Flags().StringP("parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
+    createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
     createCmd.Flags().StringP("description", "d", "", "Task description including acceptance criteria (becomes Jira description)")
 
     // Dependency flags
@@ -768,7 +1131,7 @@ func init() {
 
     // Mark required
     createCmd.MarkFlagRequired("title")
-    createCmd.MarkFlagRequired("parent")
+    createCmd.MarkFlagRequired("jira-parent")
     createCmd.MarkFlagRequired("description")
 
     // Bind output to viper for config file support
@@ -792,7 +1155,7 @@ func parseDeps(depsStr string) []string {
 func runCreate(cmd *cobra.Command, args []string) error {
     // Get flag values
     title, _ := cmd.Flags().GetString("title")
-    parent, _ := cmd.Flags().GetString("parent")
+    jiraParent, _ := cmd.Flags().GetString("jira-parent")
     description, _ := cmd.Flags().GetString("description")
     syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
     jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
@@ -840,7 +1203,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
             EndDate:          "",
             JiraURL:          "",
             SyncStatus:       markdown.SyncStatusPending,
-            Parent:           parent,
+            JiraParent:       jiraParent,
             SyncDependencies: syncDeps,
             JiraDependencies: jiraDeps,
             ContentHash:      "",
@@ -855,7 +1218,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
 
     color.Green("✓ Created: %s", filepath)
     fmt.Printf("  Title: %s\n", title)
-    fmt.Printf("  Parent: %s\n", parent)
+    fmt.Printf("  Jira-Parent: %s\n", jiraParent)
     if len(syncDeps) > 0 {
         fmt.Printf("  Sync-Dependencies: %s\n", strings.Join(syncDeps, ", "))
     }
@@ -895,8 +1258,10 @@ This command handles the full lifecycle:
 - Links dependencies for 'created' tasks
 - Updates local files with Jira data
 
+The Jira project is read from each task file's jira-project frontmatter field.
+
 Example:
-  jira-sync sync ./tasks/ --project GUARD`,
+  jira-sync sync ./tasks/`,
     Args: cobra.MaximumNArgs(1),
     RunE: runSync,
 }
@@ -904,14 +1269,11 @@ Example:
 func init() {
     rootCmd.AddCommand(syncCmd)
 
-    syncCmd.Flags().StringP("project", "p", "", "Jira project key (e.g., GUARD)")
     syncCmd.Flags().Bool("dry-run", false, "Show what would happen without making changes")
     syncCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
     syncCmd.Flags().Bool("create-only", false, "Only create tickets, don't link dependencies")
     syncCmd.Flags().Bool("link-only", false, "Only link dependencies, don't create tickets")
     syncCmd.Flags().Bool("status-only", false, "Only update status from Jira")
-
-    viper.BindPFlag("defaults.project", syncCmd.Flags().Lookup("project"))
 }
 
 func runSync(cmd *cobra.Command, args []string) error {
@@ -928,20 +1290,11 @@ func runSync(cmd *cobra.Command, args []string) error {
     }
 
     // Get flags
-    project := viper.GetString("defaults.project")
-    if p, _ := cmd.Flags().GetString("project"); p != "" {
-        project = p
-    }
     dryRun, _ := cmd.Flags().GetBool("dry-run")
     skipConfirm, _ := cmd.Flags().GetBool("yes")
     createOnly, _ := cmd.Flags().GetBool("create-only")
     linkOnly, _ := cmd.Flags().GetBool("link-only")
     statusOnly, _ := cmd.Flags().GetBool("status-only")
-
-    // Validate
-    if !statusOnly && project == "" {
-        return fmt.Errorf("--project is required (or set JIRA_DEFAULTS_PROJECT)")
-    }
 
     // Parse task files
     color.Cyan("Scanning %s...\n", tasksDir)
@@ -1009,8 +1362,8 @@ func runSync(cmd *cobra.Command, args []string) error {
         return fmt.Errorf("create jira client: %w", err)
     }
 
-    // Create orchestrator
-    orch := sync.NewOrchestrator(client, cfg, project)
+    // Create orchestrator (project is read from each task's jira-project field)
+    orch := sync.NewOrchestrator(client, cfg)
 
     // Phase 1: Create tickets IN TOPOLOGICAL ORDER (respects sync-dependencies)
     if !linkOnly && len(sortedPending) > 0 {
@@ -1032,6 +1385,475 @@ func runSync(cmd *cobra.Command, args []string) error {
 
     color.Green("\n✓ Sync complete")
     return nil
+}
+```
+
+### Full-Sync Command (Bidirectional Sync)
+
+```go
+// cmd/fullsync.go
+package cmd
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/curtbushko/jira-sync/internal/config"
+    "github.com/curtbushko/jira-sync/internal/jira"
+    "github.com/curtbushko/jira-sync/internal/markdown"
+    "github.com/curtbushko/jira-sync/internal/sync"
+    "github.com/fatih/color"
+    "github.com/spf13/cobra"
+)
+
+var fullSyncCmd = &cobra.Command{
+    Use:   "full-sync [tasks-dir]",
+    Short: "Bidirectional sync between task files and Jira",
+    Long: `Bidirectional synchronization between local task files and Jira tickets.
+
+Unlike 'sync' which only creates tickets, full-sync keeps all fields
+synchronized between local files and Jira:
+- Detects local changes and updates Jira
+- Detects Jira changes and updates local files
+- Handles conflicts when both have changed
+
+Example:
+  jira-sync full-sync ./tasks/
+  jira-sync full-sync ./tasks/ --direction local`,
+    Args: cobra.MaximumNArgs(1),
+    RunE: runFullSync,
+}
+
+func init() {
+    rootCmd.AddCommand(fullSyncCmd)
+
+    fullSyncCmd.Flags().Bool("dry-run", false, "Show what would change without making changes")
+    fullSyncCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
+    fullSyncCmd.Flags().StringP("direction", "d", "ask", "Conflict resolution: local, jira, or ask")
+    fullSyncCmd.Flags().StringP("fields", "f", "", "Comma-separated fields to sync (default: all)")
+}
+
+func runFullSync(cmd *cobra.Command, args []string) error {
+    // Get tasks directory
+    tasksDir := "./tasks"
+    if len(args) > 0 {
+        tasksDir = args[0]
+    }
+
+    // Load configuration
+    cfg, err := config.Load()
+    if err != nil {
+        return fmt.Errorf("load config: %w", err)
+    }
+
+    // Get flags
+    dryRun, _ := cmd.Flags().GetBool("dry-run")
+    skipConfirm, _ := cmd.Flags().GetBool("yes")
+    direction, _ := cmd.Flags().GetString("direction")
+    fieldsStr, _ := cmd.Flags().GetString("fields")
+
+    // Validate direction
+    if direction != "local" && direction != "jira" && direction != "ask" {
+        return fmt.Errorf("--direction must be 'local', 'jira', or 'ask'")
+    }
+
+    // Parse task files
+    color.Cyan("Scanning %s...\n", tasksDir)
+    tasks, err := markdown.ParseDirectory(tasksDir)
+    if err != nil {
+        return fmt.Errorf("parse tasks: %w", err)
+    }
+
+    // Filter to tasks with Jira tickets
+    var syncableTasks []*markdown.TaskFile
+    for _, t := range tasks {
+        if t.Frontmatter.JiraNumber != "" {
+            syncableTasks = append(syncableTasks, t)
+        }
+    }
+
+    fmt.Printf("Found %d task files with Jira tickets\n\n", len(syncableTasks))
+
+    if len(syncableTasks) == 0 {
+        color.Yellow("No tasks to sync (all tasks are pending)")
+        return nil
+    }
+
+    // Create Jira client
+    client, err := jira.NewClient(cfg.Jira.URL, cfg.Jira.User, cfg.Jira.Token)
+    if err != nil {
+        return fmt.Errorf("create jira client: %w", err)
+    }
+
+    // Create full-sync service
+    syncer := sync.NewFullSyncer(client, cfg, parseFields(fieldsStr))
+
+    // Compare all tasks
+    color.Cyan("Comparing fields...\n")
+    results, err := syncer.Compare(cmd.Context(), syncableTasks)
+    if err != nil {
+        return fmt.Errorf("compare tasks: %w", err)
+    }
+
+    // Show summary
+    showFullSyncSummary(results)
+
+    // Handle conflicts
+    if len(results.Conflicts) > 0 && direction == "ask" && !dryRun {
+        if err := resolveConflicts(results.Conflicts); err != nil {
+            return fmt.Errorf("resolve conflicts: %w", err)
+        }
+    }
+
+    if dryRun {
+        color.Yellow("\nDry run - no changes will be made")
+        return nil
+    }
+
+    // Count total changes
+    totalChanges := len(results.LocalToJira) + len(results.JiraToLocal) + len(results.Conflicts)
+    if totalChanges == 0 {
+        color.Green("\n✓ All tasks are in sync")
+        return nil
+    }
+
+    // Confirm
+    if !skipConfirm {
+        fmt.Printf("\nApply %d changes? [y/N] ", totalChanges)
+        var response string
+        fmt.Scanln(&response)
+        if response != "y" && response != "Y" {
+            color.Yellow("Cancelled")
+            return nil
+        }
+    }
+
+    // Apply changes
+    if err := syncer.Apply(cmd.Context(), results, direction); err != nil {
+        return fmt.Errorf("apply changes: %w", err)
+    }
+
+    // Update last-synced timestamp
+    now := time.Now().UTC().Format(time.RFC3339)
+    for _, t := range syncableTasks {
+        t.Frontmatter.LastSynced = now
+        if err := markdown.WriteTaskFile(t); err != nil {
+            return fmt.Errorf("update last-synced: %w", err)
+        }
+    }
+
+    color.Green("\n✓ Full sync complete")
+    return nil
+}
+
+func showFullSyncSummary(results *sync.FullSyncResults) {
+    fmt.Println("\nChanges detected:")
+
+    if len(results.LocalToJira) > 0 {
+        fmt.Println("  Local → Jira (local file changed):")
+        for _, c := range results.LocalToJira {
+            fmt.Printf("    - %s: %s\n", c.TaskID, c.Description)
+        }
+    }
+
+    if len(results.JiraToLocal) > 0 {
+        fmt.Println("\n  Jira → Local (Jira ticket changed):")
+        for _, c := range results.JiraToLocal {
+            fmt.Printf("    - %s: %s\n", c.TaskID, c.Description)
+        }
+    }
+
+    if len(results.Conflicts) > 0 {
+        color.Yellow("\n  CONFLICTS (both changed):")
+        for _, c := range results.Conflicts {
+            fmt.Printf("    - %s: %s\n", c.TaskID, c.Field)
+            fmt.Printf("      Local:  %q\n", truncate(c.LocalValue, 50))
+            fmt.Printf("      Jira:   %q\n", truncate(c.JiraValue, 50))
+        }
+    }
+
+    fmt.Printf("\n  In sync: %d tasks\n", results.InSyncCount)
+}
+```
+
+### Full-Sync Service
+
+```go
+// internal/sync/fullsync.go
+package sync
+
+import (
+    "context"
+    "time"
+
+    "github.com/curtbushko/jira-sync/internal/jira"
+    "github.com/curtbushko/jira-sync/internal/markdown"
+)
+
+// FullSyncResults holds the comparison results
+type FullSyncResults struct {
+    LocalToJira []*Change   // Local changed, need to update Jira
+    JiraToLocal []*Change   // Jira changed, need to update local
+    Conflicts   []*Conflict // Both changed
+    InSyncCount int         // Number of tasks already in sync
+}
+
+// Change represents a single field change
+type Change struct {
+    Task        *markdown.TaskFile
+    TaskID      string
+    Field       string
+    Description string
+    OldValue    string
+    NewValue    string
+}
+
+// Conflict represents a field that changed in both local and Jira
+type Conflict struct {
+    Task       *markdown.TaskFile
+    TaskID     string
+    Field      string
+    LocalValue string
+    JiraValue  string
+    Resolution string // "local", "jira", or "" (unresolved)
+}
+
+// FullSyncer handles bidirectional synchronization
+type FullSyncer struct {
+    jiraClient *jira.Client
+    cfg        *config.Config
+    fields     []string // fields to sync, empty = all
+}
+
+// NewFullSyncer creates a new full sync service
+func NewFullSyncer(client *jira.Client, cfg *config.Config, fields []string) *FullSyncer {
+    return &FullSyncer{
+        jiraClient: client,
+        cfg:        cfg,
+        fields:     fields,
+    }
+}
+
+// Compare compares local tasks with Jira tickets
+func (s *FullSyncer) Compare(ctx context.Context, tasks []*markdown.TaskFile) (*FullSyncResults, error) {
+    results := &FullSyncResults{}
+
+    for _, task := range tasks {
+        // Fetch Jira ticket
+        issue, _, err := s.jiraClient.Issue.Get(task.Frontmatter.JiraNumber, nil)
+        if err != nil {
+            return nil, fmt.Errorf("fetch %s: %w", task.Frontmatter.JiraNumber, err)
+        }
+
+        // Check if local changed since last sync
+        localChanged := task.NeedsResync()
+
+        // Check if Jira changed since last sync
+        jiraChanged := s.jiraChangedSince(issue, task.Frontmatter.LastSynced)
+
+        // Compare fields
+        fieldChanges := s.compareFields(task, issue)
+
+        if len(fieldChanges) == 0 {
+            results.InSyncCount++
+            continue
+        }
+
+        for _, fc := range fieldChanges {
+            if localChanged && jiraChanged {
+                // Conflict: both changed
+                results.Conflicts = append(results.Conflicts, &Conflict{
+                    Task:       task,
+                    TaskID:     task.TaskID(),
+                    Field:      fc.Field,
+                    LocalValue: fc.LocalValue,
+                    JiraValue:  fc.JiraValue,
+                })
+            } else if localChanged {
+                // Local changed, update Jira
+                results.LocalToJira = append(results.LocalToJira, &Change{
+                    Task:        task,
+                    TaskID:      task.TaskID(),
+                    Field:       fc.Field,
+                    Description: fmt.Sprintf("%s updated", fc.Field),
+                    OldValue:    fc.JiraValue,
+                    NewValue:    fc.LocalValue,
+                })
+            } else if jiraChanged {
+                // Jira changed, update local
+                results.JiraToLocal = append(results.JiraToLocal, &Change{
+                    Task:        task,
+                    TaskID:      task.TaskID(),
+                    Field:       fc.Field,
+                    Description: fmt.Sprintf("%s changed", fc.Field),
+                    OldValue:    fc.LocalValue,
+                    NewValue:    fc.JiraValue,
+                })
+            }
+        }
+    }
+
+    return results, nil
+}
+
+// compareFields compares individual fields between local and Jira
+func (s *FullSyncer) compareFields(task *markdown.TaskFile, issue *jira.Issue) []FieldComparison {
+    var diffs []FieldComparison
+
+    // Title/Summary
+    if s.shouldSync("title") && task.Frontmatter.Title != issue.Fields.Summary {
+        diffs = append(diffs, FieldComparison{
+            Field:      "title",
+            LocalValue: task.Frontmatter.Title,
+            JiraValue:  issue.Fields.Summary,
+        })
+    }
+
+    // Description
+    if s.shouldSync("description") && task.Description != issue.Fields.Description {
+        diffs = append(diffs, FieldComparison{
+            Field:      "description",
+            LocalValue: task.Description,
+            JiraValue:  issue.Fields.Description,
+        })
+    }
+
+    // Status/State
+    if s.shouldSync("state") && task.Frontmatter.JiraState != issue.Fields.Status.Name {
+        diffs = append(diffs, FieldComparison{
+            Field:      "state",
+            LocalValue: task.Frontmatter.JiraState,
+            JiraValue:  issue.Fields.Status.Name,
+        })
+    }
+
+    // Parent
+    if s.shouldSync("jira-parent") && issue.Fields.Parent != nil {
+        if task.Frontmatter.JiraParent != issue.Fields.Parent.Key {
+            diffs = append(diffs, FieldComparison{
+                Field:      "jira-parent",
+                LocalValue: task.Frontmatter.JiraParent,
+                JiraValue:  issue.Fields.Parent.Key,
+            })
+        }
+    }
+
+    return diffs
+}
+
+// jiraChangedSince checks if Jira ticket was updated after the given timestamp
+func (s *FullSyncer) jiraChangedSince(issue *jira.Issue, lastSynced string) bool {
+    if lastSynced == "" {
+        return true // Never synced, assume changed
+    }
+
+    syncTime, err := time.Parse(time.RFC3339, lastSynced)
+    if err != nil {
+        return true // Invalid timestamp, assume changed
+    }
+
+    // Jira's Updated field is in the issue
+    jiraUpdated := time.Time(issue.Fields.Updated)
+    return jiraUpdated.After(syncTime)
+}
+
+// Apply applies the changes based on direction
+func (s *FullSyncer) Apply(ctx context.Context, results *FullSyncResults, direction string) error {
+    // Apply local → Jira changes
+    for _, change := range results.LocalToJira {
+        if err := s.updateJira(ctx, change); err != nil {
+            return fmt.Errorf("update jira %s: %w", change.TaskID, err)
+        }
+        color.Green("✓ %s: %s updated in Jira", change.TaskID, change.Field)
+    }
+
+    // Apply Jira → local changes
+    for _, change := range results.JiraToLocal {
+        if err := s.updateLocal(change); err != nil {
+            return fmt.Errorf("update local %s: %w", change.TaskID, err)
+        }
+        color.Green("✓ %s: %s updated locally", change.TaskID, change.Field)
+    }
+
+    // Apply resolved conflicts
+    for _, conflict := range results.Conflicts {
+        if conflict.Resolution == "" {
+            continue // Unresolved, skip
+        }
+
+        if conflict.Resolution == "local" {
+            change := &Change{
+                Task:     conflict.Task,
+                TaskID:   conflict.TaskID,
+                Field:    conflict.Field,
+                NewValue: conflict.LocalValue,
+            }
+            if err := s.updateJira(ctx, change); err != nil {
+                return fmt.Errorf("resolve conflict %s: %w", conflict.TaskID, err)
+            }
+            color.Green("✓ %s: conflict resolved (local wins)", conflict.TaskID)
+        } else if conflict.Resolution == "jira" {
+            change := &Change{
+                Task:     conflict.Task,
+                TaskID:   conflict.TaskID,
+                Field:    conflict.Field,
+                NewValue: conflict.JiraValue,
+            }
+            if err := s.updateLocal(change); err != nil {
+                return fmt.Errorf("resolve conflict %s: %w", conflict.TaskID, err)
+            }
+            color.Green("✓ %s: conflict resolved (jira wins)", conflict.TaskID)
+        }
+    }
+
+    return nil
+}
+
+// updateJira updates a field in Jira
+func (s *FullSyncer) updateJira(ctx context.Context, change *Change) error {
+    update := map[string]interface{}{}
+
+    switch change.Field {
+    case "title":
+        update["summary"] = change.NewValue
+    case "description":
+        update["description"] = change.NewValue
+    case "state":
+        // Status changes require transitions, handled separately
+        return s.transitionIssue(ctx, change.Task.Frontmatter.JiraNumber, change.NewValue)
+    case "jira-parent":
+        update["parent"] = map[string]string{"key": change.NewValue}
+    }
+
+    if len(update) > 0 {
+        _, _, err := s.jiraClient.Issue.Update(&jira.Issue{
+            Key:    change.Task.Frontmatter.JiraNumber,
+            Fields: &jira.IssueFields{},
+        })
+        return err
+    }
+
+    return nil
+}
+
+// updateLocal updates a field in the local task file
+func (s *FullSyncer) updateLocal(change *Change) error {
+    switch change.Field {
+    case "title":
+        change.Task.Frontmatter.Title = change.NewValue
+    case "description":
+        change.Task.Description = change.NewValue
+    case "state":
+        change.Task.Frontmatter.JiraState = change.NewValue
+    case "jira-parent":
+        change.Task.Frontmatter.JiraParent = change.NewValue
+    }
+
+    // Update content hash
+    change.Task.Frontmatter.ContentHash = change.Task.ComputeContentHash()
+
+    return markdown.WriteTaskFile(change.Task)
 }
 ```
 
@@ -1094,15 +1916,18 @@ type TaskFile struct {
 type Frontmatter struct {
     Title            string   `yaml:"title"`
     JiraNumber       string   `yaml:"jira-number"`
+    JiraProject      string   `yaml:"jira-project"`       // Jira project key (e.g., "GUARD")
+    JiraState        string   `yaml:"jira-state"`         // Jira ticket state (default: "Todo")
     CreatedDate      string   `yaml:"created-date"`
     StartDate        string   `yaml:"start-date"`
     EndDate          string   `yaml:"end-date"`
     JiraURL          string   `yaml:"jira-url"`
     SyncStatus       string   `yaml:"sync-status"`        // Tracks sync state, not Jira ticket status
-    Parent           string   `yaml:"parent"`
+    JiraParent       string   `yaml:"jira-parent"`
     SyncDependencies []string `yaml:"sync-dependencies"`  // Controls creation order (topological sort)
     JiraDependencies []string `yaml:"jira-dependencies"`  // Creates "blocks" links in Jira
     ContentHash      string   `yaml:"content-hash"`       // SHA256 of description for change detection
+    LastSynced       string   `yaml:"last-synced"`        // ISO 8601 timestamp of last full-sync
 }
 
 // SyncStatus values - tracks sync state between local files and Jira
@@ -1113,13 +1938,13 @@ const (
 )
 
 // ComputeContentHash returns SHA256 hash of the entire file for change detection
-// It hashes title + parent + jira-dependencies + description
+// It hashes title + jira-parent + jira-dependencies + description
 // NOTE: sync-dependencies are NOT included since they don't affect Jira content
 func (t *TaskFile) ComputeContentHash() string {
     // Build canonical content string (excludes content-hash and sync-dependencies)
     var buf bytes.Buffer
     buf.WriteString(t.Frontmatter.Title)
-    buf.WriteString(t.Frontmatter.Parent)
+    buf.WriteString(t.Frontmatter.JiraParent)
     for _, dep := range t.Frontmatter.JiraDependencies {
         buf.WriteString(dep)
     }
@@ -1155,12 +1980,16 @@ func (t *TaskFile) TaskID() string {
 package markdown
 
 import (
-    "bufio"
+    "fmt"
     "os"
+    "regexp"
     "strings"
 
     "gopkg.in/yaml.v3"
 )
+
+// wikiLinkRegex matches wiki-style links: [Title](filename.md)
+var wikiLinkRegex = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+\.md)\)`)
 
 func ParseTaskFile(path string) (*TaskFile, error) {
     content, err := os.ReadFile(path)
@@ -1179,11 +2008,206 @@ func ParseTaskFile(path string) (*TaskFile, error) {
         return nil, fmt.Errorf("parse frontmatter: %w", err)
     }
 
-    return &TaskFile{
+    task := &TaskFile{
         Path:        path,
         Frontmatter: fm,
-        Body:        strings.TrimSpace(parts[2]),
-    }, nil
+        Description: strings.TrimSpace(parts[2]),
+    }
+
+    // Migrate missing fields
+    task.MigrateFrontmatter()
+
+    return task, nil
+}
+
+// MigrateFrontmatter adds missing fields with default values
+// This ensures older task files work with newer versions of jira-sync
+func (t *TaskFile) MigrateFrontmatter() bool {
+    migrated := false
+
+    // Apply defaults for missing fields
+    if t.Frontmatter.JiraState == "" {
+        t.Frontmatter.JiraState = "Todo"
+        migrated = true
+    }
+    if t.Frontmatter.SyncStatus == "" {
+        t.Frontmatter.SyncStatus = SyncStatusPending
+        migrated = true
+    }
+    if t.Frontmatter.SyncDependencies == nil {
+        t.Frontmatter.SyncDependencies = []string{}
+        migrated = true
+    }
+    if t.Frontmatter.JiraDependencies == nil {
+        t.Frontmatter.JiraDependencies = []string{}
+        migrated = true
+    }
+
+    return migrated
+}
+
+// ParseWikiLink extracts task ID and filename from a wiki-style link
+// Supports both formats:
+//   - Wiki link: "[KB-1: Initialize Project](20260116-103001.md)" -> ("KB-1", "20260116-103001.md")
+//   - Legacy: "KB-1" -> ("KB-1", "")
+func ParseWikiLink(link string) (taskID string, filename string) {
+    matches := wikiLinkRegex.FindStringSubmatch(link)
+    if len(matches) == 3 {
+        // Wiki link format: extract task ID from title (before colon)
+        title := matches[1]
+        filename = matches[2]
+        parts := strings.SplitN(title, ":", 2)
+        taskID = strings.TrimSpace(parts[0])
+        return taskID, filename
+    }
+
+    // Legacy format: plain task ID
+    return strings.TrimSpace(link), ""
+}
+
+// FormatWikiLink creates a wiki-style link from task info
+func FormatWikiLink(taskID, title, filename string) string {
+    return fmt.Sprintf("[%s: %s](%s)", taskID, title, filename)
+}
+
+// GetDependencyTaskIDs extracts task IDs from dependency array (handles both formats)
+func (t *TaskFile) GetSyncDependencyIDs() []string {
+    var ids []string
+    for _, dep := range t.Frontmatter.SyncDependencies {
+        taskID, _ := ParseWikiLink(dep)
+        if taskID != "" {
+            ids = append(ids, taskID)
+        }
+    }
+    return ids
+}
+
+// GetJiraDependencyIDs extracts task IDs from jira-dependencies array
+func (t *TaskFile) GetJiraDependencyIDs() []string {
+    var ids []string
+    for _, dep := range t.Frontmatter.JiraDependencies {
+        taskID, _ := ParseWikiLink(dep)
+        if taskID != "" {
+            ids = append(ids, taskID)
+        }
+    }
+    return ids
+}
+```
+
+### Migrate Command
+
+```go
+// cmd/migrate.go
+package cmd
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+
+    "github.com/curtbushko/jira-sync/internal/markdown"
+    "github.com/fatih/color"
+    "github.com/spf13/cobra"
+)
+
+var migrateCmd = &cobra.Command{
+    Use:   "migrate [tasks-dir]",
+    Short: "Migrate task files to add missing frontmatter fields",
+    Long: `Migrate older task files to include all required frontmatter fields.
+
+This command scans task files and adds any missing fields with sensible defaults.
+Existing field values are never modified.
+
+Example:
+  jira-sync migrate ./tasks/
+  jira-sync migrate ./tasks/ --dry-run
+  jira-sync migrate ./tasks/ --default-project GUARD`,
+    Args: cobra.MaximumNArgs(1),
+    RunE: runMigrate,
+}
+
+func init() {
+    rootCmd.AddCommand(migrateCmd)
+
+    migrateCmd.Flags().Bool("dry-run", false, "Show what would be migrated without making changes")
+    migrateCmd.Flags().String("default-project", "", "Default jira-project for tasks missing this field")
+}
+
+func runMigrate(cmd *cobra.Command, args []string) error {
+    tasksDir := "./tasks"
+    if len(args) > 0 {
+        tasksDir = args[0]
+    }
+
+    dryRun, _ := cmd.Flags().GetBool("dry-run")
+    defaultProject, _ := cmd.Flags().GetString("default-project")
+
+    color.Cyan("Scanning %s for tasks needing migration...\n", tasksDir)
+
+    var migrated, skipped, warnings int
+
+    err := filepath.Walk(tasksDir, func(path string, info os.FileInfo, err error) error {
+        if err != nil || info.IsDir() || filepath.Ext(path) != ".md" {
+            return err
+        }
+
+        task, err := markdown.ParseTaskFile(path)
+        if err != nil {
+            color.Yellow("⚠ Skipping %s: %v", path, err)
+            skipped++
+            return nil
+        }
+
+        // Check if migration is needed
+        needsMigration := task.MigrateFrontmatter()
+
+        // Apply default project if missing
+        if task.Frontmatter.JiraProject == "" {
+            if defaultProject != "" {
+                task.Frontmatter.JiraProject = defaultProject
+                needsMigration = true
+            } else {
+                color.Yellow("⚠ %s: missing jira-project (use --default-project to set)", task.TaskID())
+                warnings++
+            }
+        }
+
+        if !needsMigration {
+            return nil
+        }
+
+        if dryRun {
+            color.Green("Would migrate: %s", task.TaskID())
+        } else {
+            if err := markdown.WriteTaskFile(task); err != nil {
+                return fmt.Errorf("write %s: %w", path, err)
+            }
+            color.Green("✓ Migrated: %s", task.TaskID())
+        }
+        migrated++
+
+        return nil
+    })
+
+    if err != nil {
+        return err
+    }
+
+    fmt.Println()
+    if dryRun {
+        color.Cyan("Dry run complete: %d tasks would be migrated", migrated)
+    } else {
+        color.Green("Migration complete: %d tasks migrated", migrated)
+    }
+    if skipped > 0 {
+        color.Yellow("%d files skipped (parse errors)", skipped)
+    }
+    if warnings > 0 {
+        color.Yellow("%d warnings (missing jira-project)", warnings)
+    }
+
+    return nil
 }
 ```
 
@@ -1201,6 +2225,7 @@ import (
 
 // TopologicalSort orders tasks so that sync-dependencies are created first.
 // Returns error if circular dependency is detected.
+// Supports both wiki link format and legacy plain task ID format.
 func TopologicalSort(pending []*markdown.TaskFile, allTasks []*markdown.TaskFile) ([]*markdown.TaskFile, error) {
     // Build task ID to task map (includes all tasks, not just pending)
     taskByID := make(map[string]*markdown.TaskFile)
@@ -1223,9 +2248,10 @@ func TopologicalSort(pending []*markdown.TaskFile, allTasks []*markdown.TaskFile
     }
 
     // Count sync-dependencies that are also pending
+    // Uses GetSyncDependencyIDs() to handle both wiki link and legacy formats
     for _, t := range pending {
         id := t.TaskID()
-        for _, depID := range t.Frontmatter.SyncDependencies {
+        for _, depID := range t.GetSyncDependencyIDs() {
             if pendingSet[depID] {
                 inDegree[id]++
             }
@@ -1252,7 +2278,7 @@ func TopologicalSort(pending []*markdown.TaskFile, allTasks []*markdown.TaskFile
 
         // Reduce in-degree for tasks that depend on this one
         for _, t := range pending {
-            for _, depID := range t.Frontmatter.SyncDependencies {
+            for _, depID := range t.GetSyncDependencyIDs() {
                 if depID == id {
                     inDegree[t.TaskID()]--
                     if inDegree[t.TaskID()] == 0 {
@@ -1287,8 +2313,6 @@ import (
 type BatchCreator struct {
     jiraClient *jira.Client
     tasks      []*markdown.TaskFile // Already topologically sorted by sync-dependencies
-    project    string
-    parent     string
 }
 
 func (b *BatchCreator) Create(ctx context.Context) error {
@@ -1296,6 +2320,11 @@ func (b *BatchCreator) Create(ctx context.Context) error {
     issueMap := make(map[string]string) // local ID -> Jira key
 
     for _, task := range b.tasks {
+        // Validate that task has required jira-project field
+        if task.Frontmatter.JiraProject == "" {
+            return fmt.Errorf("task %s is missing required jira-project field", task.Frontmatter.Title)
+        }
+
         issue, err := b.createIssue(ctx, task)
         if err != nil {
             return fmt.Errorf("create %s: %w", task.Frontmatter.Title, err)
@@ -1325,11 +2354,11 @@ func (b *BatchCreator) Create(ctx context.Context) error {
 func (b *BatchCreator) createIssue(ctx context.Context, task *markdown.TaskFile) (*jira.Issue, error) {
     issue := &jira.Issue{
         Fields: &jira.IssueFields{
-            Project:     jira.Project{Key: b.project},
+            Project:     jira.Project{Key: task.Frontmatter.JiraProject},
             Summary:     task.Frontmatter.Title,
             Description: task.Description,
             Type:        jira.IssueType{Name: "Task"},
-            Parent:      &jira.Parent{Key: task.Frontmatter.Parent},
+            Parent:      &jira.Parent{Key: task.Frontmatter.JiraParent},
         },
     }
 
@@ -1495,14 +2524,16 @@ jira:
   # NOTE: Never put token in config file - use JIRA_TOKEN env var
 
 defaults:
-  project: GUARD
   issue_type: Task
+  jira_state: Todo      # default jira-state for new tasks
   start_date_offset: 0  # days from creation
   end_date_offset: 7    # days from start (default: 7)
 
 link_types:
   dependency: Blocks  # Jira link type name for dependencies
 ```
+
+Note: The Jira project is specified per-task in the `jira-project` frontmatter field, not globally.
 
 ### Environment Variables
 
@@ -1513,12 +2544,14 @@ All environment variables are prefixed with `JIRA_`:
 | `JIRA_TOKEN` | **Yes** | Jira API token (must be set via env var for security) |
 | `JIRA_URL` | Yes* | Jira instance URL (e.g., `https://company.atlassian.net`) |
 | `JIRA_USER` | Yes* | Jira username/email |
-| `JIRA_DEFAULTS_PROJECT` | No | Default project key |
 | `JIRA_DEFAULTS_ISSUE_TYPE` | No | Default issue type (default: `Task`) |
+| `JIRA_DEFAULTS_JIRA_STATE` | No | Default Jira state for new tasks (default: `Todo`) |
 | `JIRA_DEFAULTS_END_DATE_OFFSET` | No | Days to add for end date (default: `7`) |
 | `JIRA_LINK_TYPES_DEPENDENCY` | No | Link type name (default: `Blocks`) |
 
 *Can also be set in config file
+
+Note: The Jira project is specified per-task in the `jira-project` frontmatter field, not via environment variable.
 
 ```bash
 # Required
@@ -1527,9 +2560,6 @@ export JIRA_TOKEN="your-api-token"
 # Required (or set in config file)
 export JIRA_URL="https://company.atlassian.net"
 export JIRA_USER="user@company.com"
-
-# Optional
-export JIRA_DEFAULTS_PROJECT="GUARD"
 ```
 
 ### Security Note
@@ -1647,15 +2677,18 @@ Each task is a markdown file with YAML frontmatter. Files use zettelkasten namin
 ---
 title: "KB-1: Kubebuilder - Initialize Project and Repository"
 jira-number: "GUARD-101"
+jira-project: GUARD
+jira-state: Todo
 created-date: 2026-01-16
 start-date: 2026-01-16
 end-date: 2026-01-23
 jira-url: "https://company.atlassian.net/browse/GUARD-101"
 sync-status: linked
-parent: GUARD-100
+jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: "a1b2c3d4e5f6..."
+last-synced: "2026-01-21T10:30:00Z"
 ---
 
 Task description goes here, including acceptance criteria.
@@ -1669,15 +2702,18 @@ This becomes the Jira ticket description field.
 |-------|------|-------------|--------|
 | `title` | string | Task ID and title (e.g., "KB-1: Title") | Manual/create |
 | `jira-number` | string | Jira issue key (e.g., "GUARD-101") | jira-sync sync |
+| `jira-project` | string | Jira project key (e.g., "GUARD") | Manual/create |
+| `jira-state` | string | Jira ticket state (default: "Todo") | Manual/create, full-sync |
 | `created-date` | date | Date file was created | jira-sync create |
 | `start-date` | date | Date ticket created in Jira | jira-sync sync |
 | `end-date` | date | start-date + 7 days | jira-sync sync |
 | `jira-url` | string | Full URL to Jira issue | jira-sync sync |
 | `sync-status` | string | Sync state: pending, created, linked | jira-sync sync |
-| `parent` | string | Parent epic/story key | Manual/create |
+| `jira-parent` | string | Parent epic/story key | Manual/create |
 | `sync-dependencies` | array | Task IDs that must be created BEFORE this task (creation order) | Manual/create |
 | `jira-dependencies` | array | Task IDs this task is blocked by (creates Jira links) | Manual/create |
-| `content-hash` | string | SHA256 hash of entire file (for change detection) | jira-sync sync |
+| `content-hash` | string | SHA256 hash of entire file (for change detection) | jira-sync sync/full-sync |
+| `last-synced` | datetime | ISO 8601 timestamp of last full-sync (for conflict detection) | jira-sync full-sync |
 
 ### Dependency Types
 
@@ -1737,26 +2773,31 @@ This means:
 # Simple task
 jira-sync create \
   --title "KB-1: Initialize Project" \
-  --parent GUARD-100 \
+  --jira-parent GUARD-100 \
+  --project GUARD \
   --description "Initialize the kubebuilder project"
 
 # Task with both sync and jira deps set to same value (shorthand)
 jira-sync create \
   --title "CTRL-1: Controller Scaffold" \
-  --parent GUARD-100 \
+  --jira-parent GUARD-100 \
+  --project GUARD \
   --description "Create the basic controller structure. Controller compiles and runs." \
   --deps "KB-3,ERR-1"
 
 # Task with different sync and jira dependencies
 jira-sync create \
   --title "ERR-5: Implement Pod Listing" \
-  --parent GUARD-100 \
+  --jira-parent GUARD-100 \
+  --project GUARD \
   --description "List pods by deployment." \
   --sync-deps "KB-3" \
   --jira-deps "KB-3,ERR-1"
 ```
 
-### Sync with Jira
+### Sync with Jira (One-Way)
+
+The `sync` command creates tickets and links dependencies. It is **one-way** (local → Jira).
 
 ```bash
 # Set credentials
@@ -1764,15 +2805,42 @@ export JIRA_TOKEN="your-api-token"
 export JIRA_URL="https://company.atlassian.net"
 export JIRA_USER="user@company.com"
 
-# Full sync (create tickets + link dependencies)
-jira-sync sync ./tasks/ --project GUARD
+# Create tickets + link dependencies
+jira-sync sync ./tasks/
 
 # Dry run first
-jira-sync sync ./tasks/ --project GUARD --dry-run
+jira-sync sync ./tasks/ --dry-run
 
 # Only update status from Jira
 jira-sync sync ./tasks/ --status-only
 ```
+
+### Full-Sync with Jira (Bidirectional)
+
+The `full-sync` command keeps all fields synchronized between local files and Jira. It is **bidirectional**.
+
+```bash
+# Bidirectional sync (prompts on conflicts)
+jira-sync full-sync ./tasks/
+
+# Dry run to see what would change
+jira-sync full-sync ./tasks/ --dry-run
+
+# Local files always win on conflicts
+jira-sync full-sync ./tasks/ --direction local
+
+# Jira always wins on conflicts
+jira-sync full-sync ./tasks/ --direction jira
+
+# Only sync specific fields
+jira-sync full-sync ./tasks/ --fields "title,description,state"
+```
+
+**Synchronized fields:**
+- `title` ↔ Jira `summary`
+- Description (body) ↔ Jira `description`
+- `jira-state` ↔ Jira `status`
+- `jira-parent` ↔ Jira `parent`
 
 ## Working with Task Files
 
@@ -1780,7 +2848,7 @@ jira-sync sync ./tasks/ --status-only
 
 1. Generate filename: `date +'%Y%m%d-%H%M%S'.md`
 2. Copy frontmatter template from existing task
-3. Fill in title, parent, and dependencies
+3. Fill in title, jira-parent, and dependencies
 4. Set sync-status to `pending`
 5. Write description (includes acceptance criteria)
 
@@ -1817,13 +2885,15 @@ Use the `jira-sync create` command to generate properly formatted task files:
 # Basic task
 jira-sync create \
   --title "TASK-ID: Task Title" \
-  --parent "PARENT-KEY" \
+  --jira-parent "PARENT-KEY" \
+  --project "PROJECT-KEY" \
   --description "Task description"
 
 # Full task with dependencies
 jira-sync create \
   --title "ERR-5: Implement Pod Listing" \
-  --parent "GUARD-100" \
+  --jira-parent "GUARD-100" \
+  --project "GUARD" \
   --description "Implement the logic to list all Pods belonging to a Deployment. Unit tests with fake client required." \
   --dependencies "ERR-1" \
   --output "./jira/tasks/"
@@ -1940,7 +3010,7 @@ func TestParseTask_ValidFile(t *testing.T) {
 title: "KB-1: Test Task"
 jira-number: ""
 sync-status: pending
-parent: GUARD-100
+jira-parent: GUARD-100
 dependencies: []
 content-hash: ""
 ---
@@ -2032,7 +3102,7 @@ func TestTaskRepository_ReadTask(t *testing.T) {
     content := `---
 title: "KB-1: Test"
 sync-status: pending
-parent: GUARD-100
+jira-parent: GUARD-100
 dependencies: []
 content-hash: ""
 ---
@@ -2078,7 +3148,7 @@ func TestTaskRepository_ListTasks(t *testing.T) {
         content := fmt.Sprintf(`---
 title: "TASK-%d"
 sync-status: pending
-parent: GUARD-100
+jira-parent: GUARD-100
 dependencies: []
 content-hash: ""
 ---
@@ -2172,7 +3242,7 @@ func TestHashComputer_DifferentContentDifferentHash(t *testing.T) {
 
 **GREEN: Implement hash computer**
 - [ ] Implement `internal/adapters/hash/sha256.go`
-- [ ] Hash title + parent + dependencies + description
+- [ ] Hash title + jira-parent + dependencies + description
 - [ ] Return hex-encoded SHA256
 
 **REFACTOR**
@@ -2598,7 +3668,7 @@ func TestCreateCommand_CreatesTaskFile(t *testing.T) {
     cmd := NewCreateCommand(mockRepo)
     cmd.SetArgs([]string{
         "--title", "KB-1: Test Task",
-        "--parent", "GUARD-100",
+        "--jira-parent", "GUARD-100",
         "--description", "Test description",
         "--output", tmpDir,
     })
@@ -2616,7 +3686,7 @@ func TestCreateCommand_CreatesTaskFile(t *testing.T) {
 func TestCreateCommand_RequiresTitle(t *testing.T) {
     cmd := NewCreateCommand(nil)
     cmd.SetArgs([]string{
-        "--parent", "GUARD-100",
+        "--jira-parent", "GUARD-100",
         "--description", "Test",
     })
 
@@ -2640,14 +3710,14 @@ func TestSyncCommand_DryRun(t *testing.T) {
     mockRepo := &MockTaskRepository{
         ListTasksFunc: func(dir string) ([]*domain.TaskFile, error) {
             return []*domain.TaskFile{
-                {Frontmatter: domain.Frontmatter{SyncStatus: "pending", Title: "Test"}},
+                {Frontmatter: domain.Frontmatter{SyncStatus: "pending", Title: "Test", JiraProject: "GUARD", JiraState: "Todo"}},
             }, nil
         },
     }
     mockJira := &MockJiraClient{}
 
     cmd := NewSyncCommand(mockRepo, mockJira, nil, nil)
-    cmd.SetArgs([]string{"./tasks", "--project", "GUARD", "--dry-run"})
+    cmd.SetArgs([]string{"./tasks", "--dry-run"})
 
     var output bytes.Buffer
     cmd.SetOut(&output)
@@ -2687,7 +3757,8 @@ jira:
   url: https://test.atlassian.net
   user: test@test.com
 defaults:
-  project: TEST
+  issue_type: Story
+  jira_state: In Progress
 `
     os.WriteFile(configPath, []byte(configContent), 0644)
 
@@ -2695,7 +3766,8 @@ defaults:
 
     require.NoError(t, err)
     assert.Equal(t, "https://test.atlassian.net", cfg.Jira.URL)
-    assert.Equal(t, "TEST", cfg.Defaults.Project)
+    assert.Equal(t, "Story", cfg.Defaults.IssueType)
+    assert.Equal(t, "In Progress", cfg.Defaults.JiraState)
 }
 
 func TestConfig_EnvironmentOverrides(t *testing.T) {
@@ -2740,15 +3812,16 @@ func TestE2E_CreateAndSync(t *testing.T) {
     createCmd := NewCreateCommand(NewFileTaskRepository())
     createCmd.SetArgs([]string{
         "--title", "E2E-1: Test Task",
-        "--parent", os.Getenv("TEST_EPIC"),
+        "--jira-parent", os.Getenv("TEST_EPIC"),
+        "--project", "TEST",
         "--description", "E2E test task",
         "--output", tmpDir,
     })
     require.NoError(t, createCmd.Execute())
 
-    // 2. Sync to Jira
+    // 2. Sync to Jira (project is read from task file's jira-project field)
     syncCmd := NewSyncCommand(/* real dependencies */)
-    syncCmd.SetArgs([]string{tmpDir, "--project", "TEST", "--yes"})
+    syncCmd.SetArgs([]string{tmpDir, "--yes"})
     require.NoError(t, syncCmd.Execute())
 
     // 3. Verify task file was updated
@@ -2829,3 +3902,918 @@ Phases 2, 3, 4 (Mock), and 4.5 can be developed in parallel.
 Phase 5 requires 2, 3, 4 (Mock), and 4.5.
 Phase 6 requires 5.
 Phase 4 (Real) can be developed alongside Phase 5.
+
+---
+
+### Phase 9: Wiki URL Format for Dependencies
+
+Dependencies use wiki-style markdown links for navigation: `[Task Title](filename.md)`
+
+#### 9.1 Wiki Link Parser
+
+**RED: Write failing tests**
+```go
+// internal/adapters/filesystem/wikilink_test.go
+func TestParseWikiLink_ValidLink(t *testing.T) {
+    tests := []struct {
+        name       string
+        input      string
+        wantTaskID string
+        wantFile   string
+    }{
+        {
+            name:       "full wiki link",
+            input:      "[KB-1: Initialize Project](20260116-103001.md)",
+            wantTaskID: "KB-1",
+            wantFile:   "20260116-103001.md",
+        },
+        {
+            name:       "wiki link with complex title",
+            input:      "[ERR-2: Handle Pod Failures - Container State](20260116-103002.md)",
+            wantTaskID: "ERR-2",
+            wantFile:   "20260116-103002.md",
+        },
+        {
+            name:       "legacy plain task ID",
+            input:      "KB-1",
+            wantTaskID: "KB-1",
+            wantFile:   "",
+        },
+        {
+            name:       "legacy with whitespace",
+            input:      "  KB-1  ",
+            wantTaskID: "KB-1",
+            wantFile:   "",
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            taskID, filename := ParseWikiLink(tt.input)
+            assert.Equal(t, tt.wantTaskID, taskID)
+            assert.Equal(t, tt.wantFile, filename)
+        })
+    }
+}
+
+func TestParseWikiLink_InvalidLinks(t *testing.T) {
+    tests := []struct {
+        name  string
+        input string
+    }{
+        {"empty string", ""},
+        {"malformed link missing paren", "[KB-1: Title](file.md"},
+        {"malformed link missing bracket", "KB-1: Title](file.md)"},
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            taskID, _ := ParseWikiLink(tt.input)
+            // Should return empty or handle gracefully
+            if tt.input == "" {
+                assert.Equal(t, "", taskID)
+            }
+        })
+    }
+}
+```
+
+**GREEN: Implement parser**
+```go
+// internal/adapters/filesystem/wikilink.go
+package filesystem
+
+import (
+    "regexp"
+    "strings"
+)
+
+// wikiLinkRegex matches wiki-style links: [Title](filename.md)
+var wikiLinkRegex = regexp.MustCompile(`\[([^\]]+)\]\(([^)]+\.md)\)`)
+
+// ParseWikiLink extracts task ID and filename from a wiki-style link
+// Supports both formats:
+//   - Wiki link: "[KB-1: Initialize Project](20260116-103001.md)" -> ("KB-1", "20260116-103001.md")
+//   - Legacy: "KB-1" -> ("KB-1", "")
+func ParseWikiLink(link string) (taskID string, filename string) {
+    matches := wikiLinkRegex.FindStringSubmatch(link)
+    if len(matches) == 3 {
+        title := matches[1]
+        filename = matches[2]
+        parts := strings.SplitN(title, ":", 2)
+        taskID = strings.TrimSpace(parts[0])
+        return taskID, filename
+    }
+    return strings.TrimSpace(link), ""
+}
+```
+
+- [ ] Implement `internal/adapters/filesystem/wikilink.go`
+- [ ] Add regex for wiki link parsing
+- [ ] Handle legacy plain task ID format
+- [ ] Add edge case handling for malformed links
+
+**REFACTOR**
+- [ ] Extract regex to package-level constant
+- [ ] Add validation for filename format (zettelkasten pattern)
+
+#### 9.2 Wiki Link Formatter
+
+**RED: Write failing tests**
+```go
+func TestFormatWikiLink(t *testing.T) {
+    tests := []struct {
+        taskID   string
+        title    string
+        filename string
+        want     string
+    }{
+        {
+            taskID:   "KB-1",
+            title:    "Initialize Project",
+            filename: "20260116-103001.md",
+            want:     "[KB-1: Initialize Project](20260116-103001.md)",
+        },
+        {
+            taskID:   "ERR-5",
+            title:    "Pod Listing",
+            filename: "20260116-103005.md",
+            want:     "[ERR-5: Pod Listing](20260116-103005.md)",
+        },
+    }
+
+    for _, tt := range tests {
+        t.Run(tt.taskID, func(t *testing.T) {
+            got := FormatWikiLink(tt.taskID, tt.title, tt.filename)
+            assert.Equal(t, tt.want, got)
+        })
+    }
+}
+```
+
+**GREEN: Implement formatter**
+- [ ] Implement `FormatWikiLink()` function
+- [ ] Combine taskID, title, and filename into proper format
+
+#### 9.3 Dependency ID Extraction Methods
+
+**RED: Write failing tests**
+```go
+func TestTaskFile_GetSyncDependencyIDs(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            SyncDependencies: []string{
+                "[KB-1: Initialize Project](20260116-103001.md)",
+                "[KB-2: Create Types](20260116-103002.md)",
+                "KB-3", // legacy format
+            },
+        },
+    }
+
+    ids := task.GetSyncDependencyIDs()
+
+    assert.Equal(t, []string{"KB-1", "KB-2", "KB-3"}, ids)
+}
+
+func TestTaskFile_GetJiraDependencyIDs(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            JiraDependencies: []string{
+                "[ERR-1: Error Handler](20260116-104001.md)",
+            },
+        },
+    }
+
+    ids := task.GetJiraDependencyIDs()
+
+    assert.Equal(t, []string{"ERR-1"}, ids)
+}
+
+func TestTaskFile_GetDependencyIDs_Empty(t *testing.T) {
+    task := &domain.TaskFile{}
+
+    syncIDs := task.GetSyncDependencyIDs()
+    jiraIDs := task.GetJiraDependencyIDs()
+
+    assert.Empty(t, syncIDs)
+    assert.Empty(t, jiraIDs)
+}
+```
+
+**GREEN: Implement extraction methods**
+- [ ] Add `GetSyncDependencyIDs()` method to TaskFile
+- [ ] Add `GetJiraDependencyIDs()` method to TaskFile
+- [ ] Use `ParseWikiLink()` internally
+
+**REFACTOR**
+- [ ] Extract common logic to helper function
+- [ ] Add caching if performance becomes an issue
+
+---
+
+### Phase 10: Frontmatter Migration (Legacy Support)
+
+Handle older task files that are missing frontmatter fields.
+
+#### 10.1 Migration Detection
+
+**RED: Write failing tests**
+```go
+// internal/adapters/filesystem/migration_test.go
+func TestMigrateFrontmatter_MissingFields(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:      "KB-1: Test Task",
+            JiraParent: "GUARD-100",
+            // All other fields missing
+        },
+    }
+
+    migrated := task.MigrateFrontmatter()
+
+    assert.True(t, migrated, "should return true when fields were added")
+    assert.Equal(t, "Todo", task.Frontmatter.JiraState)
+    assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
+    assert.NotNil(t, task.Frontmatter.SyncDependencies)
+    assert.NotNil(t, task.Frontmatter.JiraDependencies)
+    assert.Empty(t, task.Frontmatter.SyncDependencies)
+    assert.Empty(t, task.Frontmatter.JiraDependencies)
+}
+
+func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:            "KB-1: Test Task",
+            JiraNumber:       "GUARD-123",
+            JiraProject:      "GUARD",
+            JiraState:        "In Progress",
+            SyncStatus:       "linked",
+            JiraParent:       "GUARD-100",
+            SyncDependencies: []string{"KB-0"},
+            JiraDependencies: []string{"KB-0"},
+            ContentHash:      "abc123",
+            LastSynced:       "2026-01-20T10:00:00Z",
+        },
+    }
+
+    migrated := task.MigrateFrontmatter()
+
+    assert.False(t, migrated, "should return false when no migration needed")
+    assert.Equal(t, "In Progress", task.Frontmatter.JiraState) // unchanged
+    assert.Equal(t, "linked", task.Frontmatter.SyncStatus)     // unchanged
+}
+
+func TestMigrateFrontmatter_PartialFields(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:      "KB-1: Test",
+            JiraState:  "Done", // already set
+            SyncStatus: "",     // missing
+        },
+    }
+
+    migrated := task.MigrateFrontmatter()
+
+    assert.True(t, migrated)
+    assert.Equal(t, "Done", task.Frontmatter.JiraState)   // preserved
+    assert.Equal(t, "pending", task.Frontmatter.SyncStatus) // set default
+}
+```
+
+**GREEN: Implement migration**
+```go
+// internal/domain/task.go (add method)
+
+// MigrateFrontmatter adds missing fields with default values
+// Returns true if any fields were migrated
+func (t *TaskFile) MigrateFrontmatter() bool {
+    migrated := false
+
+    if t.Frontmatter.JiraState == "" {
+        t.Frontmatter.JiraState = "Todo"
+        migrated = true
+    }
+    if t.Frontmatter.SyncStatus == "" {
+        t.Frontmatter.SyncStatus = SyncStatusPending
+        migrated = true
+    }
+    if t.Frontmatter.SyncDependencies == nil {
+        t.Frontmatter.SyncDependencies = []string{}
+        migrated = true
+    }
+    if t.Frontmatter.JiraDependencies == nil {
+        t.Frontmatter.JiraDependencies = []string{}
+        migrated = true
+    }
+
+    return migrated
+}
+```
+
+- [ ] Add `MigrateFrontmatter()` method to TaskFile
+- [ ] Set defaults for all missing fields
+- [ ] Return boolean indicating if migration occurred
+
+**REFACTOR**
+- [ ] Extract default values to constants
+- [ ] Add logging for migrated fields
+
+#### 10.2 Parser Integration with Migration
+
+**RED: Write failing tests**
+```go
+func TestParseTaskFile_AutoMigration(t *testing.T) {
+    // Old format file missing new fields
+    content := `---
+title: "KB-1: Old Task"
+jira-parent: GUARD-100
+---
+
+Old task description.`
+
+    tmpDir := t.TempDir()
+    path := filepath.Join(tmpDir, "old-task.md")
+    os.WriteFile(path, []byte(content), 0644)
+
+    repo := NewFileTaskRepository()
+    task, err := repo.ReadTask(path)
+
+    require.NoError(t, err)
+    assert.Equal(t, "Todo", task.Frontmatter.JiraState)
+    assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
+    assert.NotNil(t, task.Frontmatter.SyncDependencies)
+}
+```
+
+**GREEN: Integrate migration into parser**
+- [ ] Call `MigrateFrontmatter()` after parsing
+- [ ] Migration happens in memory, not persisted until WriteTask
+
+#### 10.3 Migrate Command
+
+**RED: Write failing tests**
+```go
+// cmd/migrate_test.go
+func TestMigrateCommand_DryRun(t *testing.T) {
+    // Setup temp directory with old-format task files
+    tmpDir := t.TempDir()
+    oldContent := `---
+title: "KB-1: Old Task"
+jira-parent: GUARD-100
+---
+
+Description.`
+    os.WriteFile(filepath.Join(tmpDir, "old.md"), []byte(oldContent), 0644)
+
+    // Run migrate command with --dry-run
+    cmd := NewMigrateCmd()
+    cmd.SetArgs([]string{tmpDir, "--dry-run"})
+
+    var stdout bytes.Buffer
+    cmd.SetOut(&stdout)
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+    assert.Contains(t, stdout.String(), "Would migrate")
+
+    // Verify file was NOT modified
+    content, _ := os.ReadFile(filepath.Join(tmpDir, "old.md"))
+    assert.NotContains(t, string(content), "jira-state")
+}
+
+func TestMigrateCommand_ActualMigration(t *testing.T) {
+    tmpDir := t.TempDir()
+    oldContent := `---
+title: "KB-1: Old Task"
+jira-parent: GUARD-100
+---
+
+Description.`
+    path := filepath.Join(tmpDir, "old.md")
+    os.WriteFile(path, []byte(oldContent), 0644)
+
+    cmd := NewMigrateCmd()
+    cmd.SetArgs([]string{tmpDir})
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+
+    // Verify file WAS modified
+    content, _ := os.ReadFile(path)
+    assert.Contains(t, string(content), "jira-state: Todo")
+    assert.Contains(t, string(content), "sync-status: pending")
+}
+
+func TestMigrateCommand_DefaultProject(t *testing.T) {
+    tmpDir := t.TempDir()
+    oldContent := `---
+title: "KB-1: Task Missing Project"
+jira-parent: GUARD-100
+---
+
+Description.`
+    path := filepath.Join(tmpDir, "task.md")
+    os.WriteFile(path, []byte(oldContent), 0644)
+
+    cmd := NewMigrateCmd()
+    cmd.SetArgs([]string{tmpDir, "--default-project", "MYPROJ"})
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+
+    content, _ := os.ReadFile(path)
+    assert.Contains(t, string(content), "jira-project: MYPROJ")
+}
+```
+
+**GREEN: Implement migrate command**
+- [ ] Create `cmd/migrate.go`
+- [ ] Walk directory for .md files
+- [ ] Parse each file and check for migration needs
+- [ ] Write back migrated files (unless --dry-run)
+- [ ] Support --default-project flag
+
+**REFACTOR**
+- [ ] Add progress indicator for large directories
+- [ ] Add summary statistics at end
+
+---
+
+### Phase 11: Full-Sync Command (Bidirectional)
+
+Bidirectional synchronization between local files and Jira.
+
+#### 11.1 Change Detection - Local vs Jira
+
+**RED: Write failing tests**
+```go
+// internal/services/fullsync/detector_test.go
+func TestDetectChanges_LocalOnlyChanged(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:       "KB-1: Test",
+            JiraNumber:  "GUARD-123",
+            ContentHash: "oldhash",
+            LastSynced:  "2026-01-15T10:00:00Z",
+        },
+        Description: "Updated description", // Changed locally
+    }
+
+    jiraIssue := &ports.Issue{
+        Key:         "GUARD-123",
+        Summary:     "KB-1: Test",
+        Description: "Original description",
+        Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC), // Before last sync
+    }
+
+    detector := NewChangeDetector(mockHashComputer)
+    result := detector.Detect(task, jiraIssue)
+
+    assert.Equal(t, ChangeTypeLocalToJira, result.Type)
+    assert.Contains(t, result.Fields, "description")
+}
+
+func TestDetectChanges_JiraOnlyChanged(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:       "KB-1: Test",
+            JiraNumber:  "GUARD-123",
+            ContentHash: "currenthash", // Matches current content
+            LastSynced:  "2026-01-15T10:00:00Z",
+        },
+        Description: "Original description",
+    }
+
+    jiraIssue := &ports.Issue{
+        Key:         "GUARD-123",
+        Summary:     "KB-1: Updated Title", // Changed in Jira
+        Description: "Original description",
+        Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
+    }
+
+    detector := NewChangeDetector(mockHashComputer)
+    result := detector.Detect(task, jiraIssue)
+
+    assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
+    assert.Contains(t, result.Fields, "title")
+}
+
+func TestDetectChanges_BothChanged_Conflict(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:       "KB-1: Local Title",
+            JiraNumber:  "GUARD-123",
+            ContentHash: "oldhash", // Different from current
+            LastSynced:  "2026-01-15T10:00:00Z",
+        },
+        Description: "Local description",
+    }
+
+    jiraIssue := &ports.Issue{
+        Key:         "GUARD-123",
+        Summary:     "KB-1: Jira Title",
+        Description: "Jira description",
+        Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
+    }
+
+    detector := NewChangeDetector(mockHashComputer)
+    result := detector.Detect(task, jiraIssue)
+
+    assert.Equal(t, ChangeTypeConflict, result.Type)
+    assert.NotEmpty(t, result.Conflicts)
+}
+
+func TestDetectChanges_NoChanges(t *testing.T) {
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:       "KB-1: Test",
+            JiraNumber:  "GUARD-123",
+            ContentHash: "currenthash",
+            LastSynced:  "2026-01-15T10:00:00Z",
+        },
+        Description: "Same description",
+    }
+
+    jiraIssue := &ports.Issue{
+        Key:         "GUARD-123",
+        Summary:     "KB-1: Test",
+        Description: "Same description",
+        Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC), // Before last sync
+    }
+
+    detector := NewChangeDetector(mockHashComputer)
+    result := detector.Detect(task, jiraIssue)
+
+    assert.Equal(t, ChangeTypeNone, result.Type)
+}
+```
+
+**GREEN: Implement change detector**
+- [ ] Create `internal/services/fullsync/detector.go`
+- [ ] Implement local change detection (hash comparison)
+- [ ] Implement Jira change detection (timestamp comparison)
+- [ ] Detect conflicts when both changed
+
+**REFACTOR**
+- [ ] Extract field comparison to separate methods
+- [ ] Add detailed conflict information
+
+#### 11.2 Field Comparison
+
+**RED: Write failing tests**
+```go
+func TestCompareFields_Title(t *testing.T) {
+    local := "KB-1: Local Title"
+    jira := "KB-1: Jira Title"
+
+    diff := CompareField("title", local, jira)
+
+    assert.True(t, diff.IsDifferent)
+    assert.Equal(t, local, diff.LocalValue)
+    assert.Equal(t, jira, diff.JiraValue)
+}
+
+func TestCompareFields_Description(t *testing.T) {
+    local := "Description\nwith newlines"
+    jira := "Description\nwith newlines"
+
+    diff := CompareField("description", local, jira)
+
+    assert.False(t, diff.IsDifferent)
+}
+
+func TestCompareFields_State(t *testing.T) {
+    local := "Todo"
+    jira := "In Progress"
+
+    diff := CompareField("state", local, jira)
+
+    assert.True(t, diff.IsDifferent)
+}
+```
+
+**GREEN: Implement field comparison**
+- [ ] Create field comparison functions
+- [ ] Handle whitespace normalization for descriptions
+- [ ] Support all syncable fields (title, description, state, parent)
+
+#### 11.3 Full-Sync Service
+
+**RED: Write failing tests**
+```go
+// internal/services/fullsync/service_test.go
+func TestFullSyncService_Compare(t *testing.T) {
+    mockRepo := &MockTaskRepository{}
+    mockJira := &MockJiraClient{}
+
+    tasks := []*domain.TaskFile{
+        {
+            Frontmatter: domain.Frontmatter{
+                Title:      "KB-1: Task 1",
+                JiraNumber: "GUARD-101",
+            },
+        },
+        {
+            Frontmatter: domain.Frontmatter{
+                Title:      "KB-2: Task 2",
+                JiraNumber: "GUARD-102",
+            },
+        },
+    }
+
+    mockJira.On("GetIssue", mock.Anything, "GUARD-101").Return(&ports.Issue{
+        Key:     "GUARD-101",
+        Summary: "KB-1: Task 1",
+    }, nil)
+    mockJira.On("GetIssue", mock.Anything, "GUARD-102").Return(&ports.Issue{
+        Key:     "GUARD-102",
+        Summary: "KB-2: Updated", // Changed in Jira
+    }, nil)
+
+    service := NewFullSyncService(mockRepo, mockJira)
+    results, err := service.Compare(context.Background(), tasks)
+
+    require.NoError(t, err)
+    assert.Len(t, results.JiraToLocal, 1)
+    assert.Equal(t, "KB-2", results.JiraToLocal[0].TaskID)
+}
+
+func TestFullSyncService_Apply_LocalToJira(t *testing.T) {
+    mockRepo := &MockTaskRepository{}
+    mockJira := &MockJiraClient{}
+
+    change := &Change{
+        Task:     &domain.TaskFile{...},
+        TaskID:   "KB-1",
+        Field:    "description",
+        NewValue: "Updated description",
+    }
+
+    mockJira.On("UpdateIssue", mock.Anything, "GUARD-101", mock.Anything).Return(nil)
+    mockRepo.On("WriteTask", mock.Anything).Return(nil)
+
+    service := NewFullSyncService(mockRepo, mockJira)
+    err := service.ApplyChange(context.Background(), change, DirectionLocalToJira)
+
+    require.NoError(t, err)
+    mockJira.AssertCalled(t, "UpdateIssue", mock.Anything, "GUARD-101", mock.Anything)
+}
+
+func TestFullSyncService_Apply_JiraToLocal(t *testing.T) {
+    mockRepo := &MockTaskRepository{}
+    mockJira := &MockJiraClient{}
+
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:      "KB-1: Old Title",
+            JiraNumber: "GUARD-101",
+        },
+    }
+
+    change := &Change{
+        Task:     task,
+        TaskID:   "KB-1",
+        Field:    "title",
+        NewValue: "KB-1: New Title",
+    }
+
+    mockRepo.On("WriteTask", mock.Anything).Return(nil)
+
+    service := NewFullSyncService(mockRepo, mockJira)
+    err := service.ApplyChange(context.Background(), change, DirectionJiraToLocal)
+
+    require.NoError(t, err)
+    assert.Equal(t, "KB-1: New Title", task.Frontmatter.Title)
+    mockRepo.AssertCalled(t, "WriteTask", task)
+}
+```
+
+**GREEN: Implement full-sync service**
+- [ ] Create `internal/services/fullsync/service.go`
+- [ ] Implement `Compare()` method
+- [ ] Implement `Apply()` method
+- [ ] Handle conflict resolution (local wins, jira wins, ask)
+
+**REFACTOR**
+- [ ] Add batch operations for efficiency
+- [ ] Add transaction-like behavior with rollback
+
+#### 11.4 Full-Sync Command
+
+**RED: Write failing tests**
+```go
+// cmd/fullsync_test.go
+func TestFullSyncCommand_DryRun(t *testing.T) {
+    // Setup mocks and test data
+    cmd := NewFullSyncCmd(mockService)
+    cmd.SetArgs([]string{"./tasks", "--dry-run"})
+
+    var stdout bytes.Buffer
+    cmd.SetOut(&stdout)
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+    assert.Contains(t, stdout.String(), "Dry run")
+    // Verify no actual changes were made
+}
+
+func TestFullSyncCommand_DirectionLocal(t *testing.T) {
+    cmd := NewFullSyncCmd(mockService)
+    cmd.SetArgs([]string{"./tasks", "--direction", "local"})
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+    // Verify conflicts resolved with local winning
+}
+
+func TestFullSyncCommand_DirectionJira(t *testing.T) {
+    cmd := NewFullSyncCmd(mockService)
+    cmd.SetArgs([]string{"./tasks", "--direction", "jira"})
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+    // Verify conflicts resolved with jira winning
+}
+
+func TestFullSyncCommand_FieldFilter(t *testing.T) {
+    cmd := NewFullSyncCmd(mockService)
+    cmd.SetArgs([]string{"./tasks", "--fields", "title,description"})
+    err := cmd.Execute()
+
+    require.NoError(t, err)
+    // Verify only specified fields were synced
+}
+```
+
+**GREEN: Implement full-sync command**
+- [ ] Create `cmd/fullsync.go`
+- [ ] Add --dry-run flag
+- [ ] Add --direction flag (local, jira, ask)
+- [ ] Add --fields flag for field filtering
+- [ ] Add --yes flag to skip confirmation
+
+**REFACTOR**
+- [ ] Add progress bar for large sync operations
+- [ ] Add colored output for changes
+
+---
+
+### Phase 12: Status Transitions (Jira Workflow)
+
+Handle Jira status/workflow transitions properly.
+
+#### 12.1 Status Transition Service
+
+**RED: Write failing tests**
+```go
+// internal/services/jira/transition_test.go
+func TestTransitionIssue_ValidTransition(t *testing.T) {
+    mockClient := &MockJiraClient{}
+    mockClient.On("GetTransitions", mock.Anything, "GUARD-123").Return([]ports.Transition{
+        {ID: "21", Name: "In Progress"},
+        {ID: "31", Name: "Done"},
+    }, nil)
+    mockClient.On("DoTransition", mock.Anything, "GUARD-123", "21").Return(nil)
+
+    service := NewTransitionService(mockClient)
+    err := service.TransitionTo(context.Background(), "GUARD-123", "In Progress")
+
+    require.NoError(t, err)
+    mockClient.AssertCalled(t, "DoTransition", mock.Anything, "GUARD-123", "21")
+}
+
+func TestTransitionIssue_InvalidTransition(t *testing.T) {
+    mockClient := &MockJiraClient{}
+    mockClient.On("GetTransitions", mock.Anything, "GUARD-123").Return([]ports.Transition{
+        {ID: "21", Name: "In Progress"},
+    }, nil)
+
+    service := NewTransitionService(mockClient)
+    err := service.TransitionTo(context.Background(), "GUARD-123", "Done")
+
+    assert.Error(t, err)
+    assert.Contains(t, err.Error(), "transition to 'Done' not available")
+}
+
+func TestTransitionIssue_AlreadyInState(t *testing.T) {
+    mockClient := &MockJiraClient{}
+    mockClient.On("GetIssue", mock.Anything, "GUARD-123").Return(&ports.Issue{
+        Status: "Done",
+    }, nil)
+
+    service := NewTransitionService(mockClient)
+    err := service.TransitionTo(context.Background(), "GUARD-123", "Done")
+
+    require.NoError(t, err)
+    // No transition should be attempted
+    mockClient.AssertNotCalled(t, "DoTransition")
+}
+```
+
+**GREEN: Implement transition service**
+- [ ] Create `internal/services/jira/transition.go`
+- [ ] Fetch available transitions for issue
+- [ ] Find transition by target state name
+- [ ] Execute transition
+
+**REFACTOR**
+- [ ] Cache transition mappings
+- [ ] Add helpful error messages with available transitions
+
+---
+
+### Updated Implementation Checklist Summary
+
+#### Phase 1: Project Setup
+- [ ] 1.1 Initialize Go module
+- [ ] 1.2 Create domain types
+
+#### Phase 2: Task Repository
+- [ ] 2.1 Parser - RED/GREEN/REFACTOR
+- [ ] 2.2 Writer - RED/GREEN/REFACTOR
+- [ ] 2.3 Repository - RED/GREEN/REFACTOR
+
+#### Phase 3: Hash Computer
+- [ ] 3.1 SHA256 hash - RED/GREEN/REFACTOR
+
+#### Phase 4: Jira Client
+- [ ] 4.1 Mock client
+- [ ] 4.2 Real client - RED/GREEN/REFACTOR
+
+#### Phase 4.5: Topological Sort
+- [ ] 4.5.1 Topological sort - RED/GREEN/REFACTOR
+
+#### Phase 5: Sync Service
+- [ ] 5.1 Task categorization - RED/GREEN/REFACTOR
+- [ ] 5.2 Create tickets - RED/GREEN/REFACTOR
+- [ ] 5.3 Link dependencies - RED/GREEN/REFACTOR
+- [ ] 5.4 Update modified - RED/GREEN/REFACTOR
+
+#### Phase 6: CLI Commands (Basic)
+- [ ] 6.1 Create command - RED/GREEN/REFACTOR
+- [ ] 6.2 Sync command - RED/GREEN/REFACTOR
+
+#### Phase 7: Configuration
+- [ ] 7.1 Config loading - RED/GREEN/REFACTOR
+
+#### Phase 8: Integration Tests
+- [ ] 8.1 E2E tests
+
+#### Phase 9: Wiki URL Format
+- [ ] 9.1 Wiki link parser - RED/GREEN/REFACTOR
+- [ ] 9.2 Wiki link formatter - RED/GREEN/REFACTOR
+- [ ] 9.3 Dependency ID extraction - RED/GREEN/REFACTOR
+
+#### Phase 10: Frontmatter Migration
+- [ ] 10.1 Migration detection - RED/GREEN/REFACTOR
+- [ ] 10.2 Parser integration - RED/GREEN/REFACTOR
+- [ ] 10.3 Migrate command - RED/GREEN/REFACTOR
+
+#### Phase 11: Full-Sync (Bidirectional)
+- [ ] 11.1 Change detection - RED/GREEN/REFACTOR
+- [ ] 11.2 Field comparison - RED/GREEN/REFACTOR
+- [ ] 11.3 Full-sync service - RED/GREEN/REFACTOR
+- [ ] 11.4 Full-sync command - RED/GREEN/REFACTOR
+
+#### Phase 12: Status Transitions
+- [ ] 12.1 Transition service - RED/GREEN/REFACTOR
+
+---
+
+### Updated Dependency Graph
+
+```
+Phase 1 (Domain Types)
+    ↓
+Phase 2 (Task Repository) ←───────────────────────┐
+    ↓                                              │
+Phase 3 (Hash Computer)                            │
+    ↓                                              │
+Phase 4 (Jira Client - Mock) ──────────────────────┤
+    ↓                                              │
+Phase 4.5 (Topological Sort) ──────────────────────┤
+    ↓                                              │
+Phase 9 (Wiki URL Format) ─────────────────────────┤
+    ↓                                              │
+Phase 10 (Frontmatter Migration) ──────────────────┤
+    ↓                                              │
+Phase 5 (Sync Service) ────────────────────────────┤
+    ↓                                              │
+Phase 6 (CLI Commands - Basic) ────────────────────┤
+    ↓                                              │
+Phase 11 (Full-Sync Service) ──────────────────────┤
+    ↓                                              │
+Phase 12 (Status Transitions) ─────────────────────┘
+    ↓
+Phase 7 (Configuration)
+    ↓
+Phase 8 (Integration Tests)
+```
+
+**Parallel Development Opportunities:**
+- Phases 2, 3, 4 (Mock), 4.5, 9, 10 can be developed in parallel
+- Phase 5 requires 2, 3, 4 (Mock), 4.5, 9
+- Phase 6 requires 5
+- Phase 11 requires 5, 10
+- Phase 12 requires 4 (Real)
+- Phases 7 and 8 come last

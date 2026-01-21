@@ -13,7 +13,7 @@ func FuzzParser_Parse(f *testing.F) {
 	// Add seed corpus with valid and edge-case inputs
 	seeds := []string{
 		// Valid minimal frontmatter
-		"---\ntitle: Test\nparent: GUARD-100\n---\nDescription",
+		"---\ntitle: Test\njira-parent: GUARD-100\n---\nDescription",
 		// Valid with all fields
 		`---
 title: "KB-1: Test Task"
@@ -23,8 +23,8 @@ start-date: "2026-01-16"
 end-date: "2026-01-23"
 jira-url: "https://company.atlassian.net/browse/GUARD-101"
 sync-status: pending
-parent: GUARD-100
-dependencies: []
+jira-parent: GUARD-100
+jira-dependencies: []
 content-hash: "abc123"
 ---
 
@@ -32,21 +32,21 @@ Task description here.`,
 		// With dependencies
 		`---
 title: "ERR-2: Implement Detection"
-parent: GUARD-100
-dependencies:
+jira-parent: GUARD-100
+jira-dependencies:
   - KB-3
   - ERR-1
 ---
 
 Description`,
 		// Empty body
-		"---\ntitle: Test\nparent: GUARD-100\n---\n",
+		"---\ntitle: Test\njira-parent: GUARD-100\n---\n",
 		// Missing title (should error)
-		"---\nparent: GUARD-100\n---\nDescription",
+		"---\njira-parent: GUARD-100\n---\nDescription",
 		// Missing parent (should error)
 		"---\ntitle: Test\n---\nDescription",
 		// Missing end delimiter
-		"---\ntitle: Test\nparent: GUARD-100",
+		"---\ntitle: Test\njira-parent: GUARD-100",
 		// No frontmatter at all
 		"Just plain text",
 		// Empty string
@@ -54,21 +54,21 @@ Description`,
 		// Only delimiters
 		"---\n---",
 		// Malformed YAML
-		"---\ntitle: [invalid\nparent: GUARD-100\n---\n",
+		"---\ntitle: [invalid\njira-parent: GUARD-100\n---\n",
 		// Unicode content
-		"---\ntitle: \"Test 日本語 émoji 🎉\"\nparent: GUARD-100\n---\nDescription with émojis 🚀",
+		"---\ntitle: \"Test 日本語 émoji 🎉\"\njira-parent: GUARD-100\n---\nDescription with émojis 🚀",
 		// Very long title
-		"---\ntitle: \"" + string(make([]byte, 1000)) + "\"\nparent: GUARD-100\n---\n",
+		"---\ntitle: \"" + string(make([]byte, 1000)) + "\"\njira-parent: GUARD-100\n---\n",
 		// Special YAML characters
-		"---\ntitle: \"Test: with: colons\"\nparent: \"GUARD-100\"\n---\n",
+		"---\ntitle: \"Test: with: colons\"\njira-parent: \"GUARD-100\"\n---\n",
 		// Newlines in values
-		"---\ntitle: |\n  Multi\n  Line\nparent: GUARD-100\n---\n",
+		"---\ntitle: |\n  Multi\n  Line\njira-parent: GUARD-100\n---\n",
 		// Tabs and spaces
-		"---\n\ttitle: Test\n  parent: GUARD-100\n---\n",
+		"---\n\ttitle: Test\n  jira-parent: GUARD-100\n---\n",
 		// Windows line endings
-		"---\r\ntitle: Test\r\nparent: GUARD-100\r\n---\r\nDescription",
+		"---\r\ntitle: Test\r\njira-parent: GUARD-100\r\n---\r\nDescription",
 		// Multiple --- in body
-		"---\ntitle: Test\nparent: GUARD-100\n---\nBody with --- dashes",
+		"---\ntitle: Test\njira-parent: GUARD-100\n---\nBody with --- dashes",
 	}
 
 	for _, seed := range seeds {
@@ -91,7 +91,7 @@ Description`,
 			if task.Frontmatter.Title == "" {
 				t.Error("Parse returned empty title without error")
 			}
-			if task.Frontmatter.Parent == "" {
+			if task.Frontmatter.JiraParent == "" {
 				t.Error("Parse returned empty parent without error")
 			}
 		}
@@ -114,8 +114,8 @@ start-date: ""
 end-date: ""
 jira-url: ""
 sync-status: pending
-parent: GUARD-100
-dependencies: []
+jira-parent: GUARD-100
+jira-dependencies: []
 content-hash: ""
 ---
 
@@ -128,8 +128,8 @@ start-date: "2026-01-16"
 end-date: "2026-01-23"
 jira-url: "https://company.atlassian.net/browse/GUARD-102"
 sync-status: linked
-parent: GUARD-100
-dependencies:
+jira-parent: GUARD-100
+jira-dependencies:
   - KB-3
   - ERR-1
 content-hash: "abc123"
@@ -165,8 +165,8 @@ Implement detection.`,
 		if task1.Frontmatter.Title != task2.Frontmatter.Title {
 			t.Errorf("Title mismatch: %q vs %q", task1.Frontmatter.Title, task2.Frontmatter.Title)
 		}
-		if task1.Frontmatter.Parent != task2.Frontmatter.Parent {
-			t.Errorf("Parent mismatch: %q vs %q", task1.Frontmatter.Parent, task2.Frontmatter.Parent)
+		if task1.Frontmatter.JiraParent != task2.Frontmatter.JiraParent {
+			t.Errorf("Parent mismatch: %q vs %q", task1.Frontmatter.JiraParent, task2.Frontmatter.JiraParent)
 		}
 		if task1.Frontmatter.JiraNumber != task2.Frontmatter.JiraNumber {
 			t.Errorf("JiraNumber mismatch: %q vs %q", task1.Frontmatter.JiraNumber, task2.Frontmatter.JiraNumber)
@@ -176,9 +176,9 @@ Implement detection.`,
 		}
 
 		// Check dependencies length match
-		if len(task1.Frontmatter.Dependencies) != len(task2.Frontmatter.Dependencies) {
+		if len(task1.Frontmatter.JiraDependencies) != len(task2.Frontmatter.JiraDependencies) {
 			t.Errorf("Dependencies length mismatch: %d vs %d",
-				len(task1.Frontmatter.Dependencies), len(task2.Frontmatter.Dependencies))
+				len(task1.Frontmatter.JiraDependencies), len(task2.Frontmatter.JiraDependencies))
 		}
 	})
 }

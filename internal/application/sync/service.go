@@ -87,13 +87,13 @@ func (s *Service) needsResync(task *domain.TaskFile) bool {
 
 // CreateTickets creates Jira tickets for pending tasks.
 // Fields are validated and truncated if they exceed Jira limits.
-// Uses task's project if set, otherwise falls back to defaultProject.
+// Uses task's jira-project if set, otherwise falls back to defaultProject.
 func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, defaultProject, issueType string) error {
 	now := time.Now()
 
 	for _, task := range tasks {
-		// Use task's project if set, otherwise use default
-		project := task.Frontmatter.Project
+		// Use task's jira-project if set, otherwise use default
+		project := task.Frontmatter.JiraProject
 		if project == "" {
 			project = defaultProject
 		}
@@ -106,7 +106,7 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 			Summary:     summary,
 			Description: description,
 			IssueType:   issueType,
-			Parent:      task.Frontmatter.Parent,
+			Parent:      task.Frontmatter.JiraParent,
 		})
 		if err != nil {
 			return fmt.Errorf("create ticket for %s: %w", task.Frontmatter.Title, err)
@@ -124,20 +124,21 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 }
 
 // LinkDependencies creates dependency links in Jira for all tasks.
+// Uses jira-dependencies (not sync-dependencies) since those define Jira "blocks" links.
 func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile, linkType string) error {
 	// Build task ID to Jira key map
 	idMap := s.BuildTaskIDMap(tasks)
 
-	// Create links for each task
+	// Create links for each task based on jira-dependencies
 	for _, task := range tasks {
-		if len(task.Frontmatter.Dependencies) == 0 {
+		if len(task.Frontmatter.JiraDependencies) == 0 {
 			task.Frontmatter.SyncStatus = domain.SyncStatusLinked
 			continue
 		}
 
 		blockedIssue := task.Frontmatter.JiraNumber
 
-		for _, depID := range task.Frontmatter.Dependencies {
+		for _, depID := range task.Frontmatter.JiraDependencies {
 			blockerIssue, ok := idMap[depID]
 			if !ok {
 				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, depID, task.Frontmatter.Title)

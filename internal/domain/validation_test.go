@@ -217,8 +217,8 @@ func TestFieldValidator_ValidateTask(t *testing.T) {
 	task := &TaskFile{
 		Path: "/tasks/test.md",
 		Frontmatter: Frontmatter{
-			Title:  strings.Repeat("x", JiraSummaryMaxLength+50),
-			Parent: "GUARD-100",
+			Title:      strings.Repeat("x", JiraSummaryMaxLength+50),
+			JiraParent: "GUARD-100",
 		},
 		Description: "Normal description",
 	}
@@ -245,8 +245,8 @@ func TestFieldValidator_ValidateTask_NoLogger(t *testing.T) {
 	task := &TaskFile{
 		Path: "/tasks/test.md",
 		Frontmatter: Frontmatter{
-			Title:  strings.Repeat("x", JiraSummaryMaxLength+50),
-			Parent: "GUARD-100",
+			Title:      strings.Repeat("x", JiraSummaryMaxLength+50),
+			JiraParent: "GUARD-100",
 		},
 		Description: "Normal description",
 	}
@@ -264,8 +264,8 @@ func TestFieldValidator_ValidateTask_BothFieldsTruncated(t *testing.T) {
 	task := &TaskFile{
 		Path: "/tasks/long.md",
 		Frontmatter: Frontmatter{
-			Title:  strings.Repeat("T", JiraSummaryMaxLength+100),
-			Parent: "GUARD-100",
+			Title:      strings.Repeat("T", JiraSummaryMaxLength+100),
+			JiraParent: "GUARD-100",
 		},
 		Description: strings.Repeat("D", JiraDescriptionMaxLength+1000),
 	}

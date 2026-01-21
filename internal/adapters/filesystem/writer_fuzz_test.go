@@ -67,9 +67,9 @@ func FuzzWriter_Marshal(f *testing.F) {
 				EndDate:      endDate,
 				JiraURL:      jiraURL,
 				SyncStatus:   syncStatus,
-				Parent:       parent,
+				JiraParent:       parent,
 				ContentHash:  contentHash,
-				Dependencies: []string{}, // Start with empty deps
+				JiraDependencies: []string{}, // Start with empty deps
 			},
 			Description: description,
 		}
@@ -124,8 +124,8 @@ func FuzzWriter_MarshalWithDependencies(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:        "KB-1: Test",
 				SyncStatus:   "pending",
-				Parent:       "GUARD-100",
-				Dependencies: deps,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: deps,
 			},
 			Description: "Test description",
 		}

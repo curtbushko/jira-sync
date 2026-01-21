@@ -41,9 +41,9 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title,
-				Parent:       parent,
-				Dependencies: nil,
+				Title:            title,
+				JiraParent:       parent,
+				JiraDependencies: nil,
 			},
 			Description: description,
 		}
@@ -75,9 +75,9 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 		differentTask := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title + "X",
-				Parent:       parent,
-				Dependencies: nil,
+				Title:            title + "X",
+				JiraParent:       parent,
+				JiraDependencies: nil,
 			},
 			Description: description,
 		}
@@ -114,9 +114,9 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title,
-				Parent:       parent,
-				Dependencies: deps,
+				Title:            title,
+				JiraParent:       parent,
+				JiraDependencies: deps,
 			},
 			Description: description,
 		}
@@ -145,9 +145,9 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 			reversedTask := &domain.TaskFile{
 				Path: "test.md",
 				Frontmatter: domain.Frontmatter{
-					Title:        title,
-					Parent:       parent,
-					Dependencies: reversedDeps,
+					Title:            title,
+					JiraParent:       parent,
+					JiraDependencies: reversedDeps,
 				},
 				Description: description,
 			}
@@ -171,9 +171,9 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 		taskNil := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title,
-				Parent:       parent,
-				Dependencies: nil,
+				Title:            title,
+				JiraParent:       parent,
+				JiraDependencies: nil,
 			},
 			Description: description,
 		}
@@ -182,9 +182,9 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 		taskEmpty := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title,
-				Parent:       parent,
-				Dependencies: []string{},
+				Title:            title,
+				JiraParent:       parent,
+				JiraDependencies: []string{},
 			},
 			Description: description,
 		}

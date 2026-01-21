@@ -23,7 +23,7 @@ func TestSyncService_CategorizeTasks(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:       "KB-1: Test",
 			SyncStatus:  domain.SyncStatusPending,
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "",
 		},
 		Description: "Pending task",
@@ -34,7 +34,7 @@ func TestSyncService_CategorizeTasks(t *testing.T) {
 			Title:       "KB-2: Test",
 			SyncStatus:  domain.SyncStatusCreated,
 			JiraNumber:  "GUARD-101",
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "",
 		},
 		Description: "Created task",
@@ -45,7 +45,7 @@ func TestSyncService_CategorizeTasks(t *testing.T) {
 			Title:       "KB-3: Test",
 			SyncStatus:  domain.SyncStatusLinked,
 			JiraNumber:  "GUARD-102",
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "", // Will be set to match
 		},
 		Description: "Linked task",
@@ -58,7 +58,7 @@ func TestSyncService_CategorizeTasks(t *testing.T) {
 			Title:       "KB-4: Test",
 			SyncStatus:  domain.SyncStatusLinked,
 			JiraNumber:  "GUARD-103",
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "oldhash", // Different from actual
 		},
 		Description: "Modified task",
@@ -90,9 +90,10 @@ func TestSyncService_CreateTickets(t *testing.T) {
 	pendingTask := &domain.TaskFile{
 		Path: "/tasks/test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:      "KB-1: Test Task",
-			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			Title:       "KB-1: Test Task",
+			SyncStatus:  domain.SyncStatusPending,
+			JiraParent:  "GUARD-100",
+			JiraProject: "", // Will use default project
 		},
 		Description: "Test description",
 	}
@@ -116,6 +117,31 @@ func TestSyncService_CreateTickets(t *testing.T) {
 	assert.NotEmpty(t, pendingTask.Frontmatter.EndDate)
 }
 
+func TestSyncService_CreateTickets_UsesTaskProject(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	mockJira.SetBaseURL("https://test.atlassian.net")
+
+	pendingTask := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:       "KB-1: Test Task",
+			SyncStatus:  domain.SyncStatusPending,
+			JiraParent:  "MYPROJ-100",
+			JiraProject: "MYPROJ", // Task-specific project
+		},
+		Description: "Test description",
+	}
+
+	svc := NewService(nil, mockJira, nil)
+	err := svc.CreateTickets(context.Background(), []*domain.TaskFile{pendingTask}, "DEFAULT", "Task")
+
+	require.NoError(t, err)
+
+	// Verify task's project was used, not the default
+	assert.Len(t, mockJira.CreateIssueCalls, 1)
+	assert.Equal(t, "MYPROJ", mockJira.CreateIssueCalls[0].Project)
+}
+
 func TestSyncService_CreateTickets_JiraError(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.CreateIssueFunc = func(_ context.Context, _ ports.CreateIssueRequest) (*ports.Issue, error) {
@@ -127,7 +153,7 @@ func TestSyncService_CreateTickets_JiraError(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:      "KB-1: Test",
 			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			JiraParent: "GUARD-100",
 		},
 		Description: "Test",
 	}
@@ -145,20 +171,20 @@ func TestSyncService_LinkDependencies(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-1: First",
-				JiraNumber:   "GUARD-101",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{},
+				Title:            "KB-1: First",
+				JiraNumber:       "GUARD-101",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
 			},
 		},
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-2: Second",
-				JiraNumber:   "GUARD-102",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"},
+				Title:            "KB-2: Second",
+				JiraNumber:       "GUARD-102",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"},
 			},
 		},
 	}
@@ -185,29 +211,29 @@ func TestSyncService_LinkDependencies_MultipleDeps(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-1: First",
-				JiraNumber:   "GUARD-101",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{},
+				Title:            "KB-1: First",
+				JiraNumber:       "GUARD-101",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
 			},
 		},
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "ERR-1: Second",
-				JiraNumber:   "GUARD-102",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{},
+				Title:            "ERR-1: Second",
+				JiraNumber:       "GUARD-102",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
 			},
 		},
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "CTRL-1: Third",
-				JiraNumber:   "GUARD-103",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1", "ERR-1"},
+				Title:            "CTRL-1: Third",
+				JiraNumber:       "GUARD-103",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1", "ERR-1"},
 			},
 		},
 	}
@@ -227,11 +253,11 @@ func TestSyncService_LinkDependencies_MissingDep(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-2: Second",
-				JiraNumber:   "GUARD-102",
-				SyncStatus:   domain.SyncStatusCreated,
-				Parent:       "GUARD-100",
-				Dependencies: []string{"KB-1"}, // KB-1 doesn't exist in tasks
+				Title:            "KB-2: Second",
+				JiraNumber:       "GUARD-102",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"KB-1"}, // KB-1 doesn't exist in tasks
 			},
 		},
 	}
@@ -253,7 +279,7 @@ func TestSyncService_UpdateModified(t *testing.T) {
 			Title:       "KB-1: Updated Title",
 			JiraNumber:  "GUARD-101",
 			SyncStatus:  domain.SyncStatusLinked,
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "oldhash",
 		},
 		Description: "Updated description",
@@ -337,7 +363,7 @@ func TestSyncService_CreateTickets_TruncatesLongSummary(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:      longTitle,
 			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			JiraParent: "GUARD-100",
 		},
 		Description: "Test description",
 	}
@@ -368,7 +394,7 @@ func TestSyncService_CreateTickets_TruncatesLongDescription(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:      "KB-1: Test Task",
 			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			JiraParent: "GUARD-100",
 		},
 		Description: longDescription,
 	}
@@ -398,7 +424,7 @@ func TestSyncService_CreateTickets_WithLogger(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:      longTitle,
 			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			JiraParent: "GUARD-100",
 		},
 		Description: "Test description",
 	}
@@ -427,7 +453,7 @@ func TestSyncService_UpdateModified_TruncatesFields(t *testing.T) {
 			Title:       longTitle,
 			JiraNumber:  "GUARD-101",
 			SyncStatus:  domain.SyncStatusLinked,
-			Parent:      "GUARD-100",
+			JiraParent:  "GUARD-100",
 			ContentHash: "oldhash",
 		},
 		Description: "Updated description",
@@ -456,7 +482,7 @@ func TestSyncService_CreateTickets_NoTruncationNeeded(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:      "KB-1: Normal Task",
 			SyncStatus: domain.SyncStatusPending,
-			Parent:     "GUARD-100",
+			JiraParent: "GUARD-100",
 		},
 		Description: "Normal description",
 	}

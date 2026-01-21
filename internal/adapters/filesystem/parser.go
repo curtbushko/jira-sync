@@ -69,8 +69,8 @@ func (p *Parser) validate(fm *domain.Frontmatter) error {
 	if fm.Title == "" {
 		return domain.NewValidationError("title", "is required")
 	}
-	if fm.Parent == "" {
-		return domain.NewValidationError("parent", "is required")
+	if fm.JiraParent == "" {
+		return domain.NewValidationError("jira-parent", "is required")
 	}
 	return nil
 }

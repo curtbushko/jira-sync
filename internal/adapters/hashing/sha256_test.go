@@ -10,9 +10,9 @@ import (
 func TestHashComputer_ComputeHash(t *testing.T) {
 	task := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "KB-1: Test",
-			Parent:       "GUARD-100",
-			Dependencies: []string{"KB-0"},
+			Title:            "KB-1: Test",
+			JiraParent:       "GUARD-100",
+			JiraDependencies: []string{"KB-0"},
 		},
 		Description: "Test description",
 	}
@@ -27,17 +27,17 @@ func TestHashComputer_ComputeHash(t *testing.T) {
 func TestHashComputer_SameContentSameHash(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"A", "B"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"A", "B"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"A", "B"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"A", "B"},
 		},
 		Description: "Desc",
 	}
@@ -49,11 +49,11 @@ func TestHashComputer_SameContentSameHash(t *testing.T) {
 
 func TestHashComputer_DifferentTitleDifferentHash(t *testing.T) {
 	task1 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test1", Parent: "P"},
+		Frontmatter: domain.Frontmatter{Title: "Test1", JiraParent: "P"},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test2", Parent: "P"},
+		Frontmatter: domain.Frontmatter{Title: "Test2", JiraParent: "P"},
 		Description: "Desc",
 	}
 
@@ -62,13 +62,13 @@ func TestHashComputer_DifferentTitleDifferentHash(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_DifferentParentDifferentHash(t *testing.T) {
+func TestHashComputer_DifferentJiraParentDifferentHash(t *testing.T) {
 	task1 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test", Parent: "P1"},
+		Frontmatter: domain.Frontmatter{Title: "Test", JiraParent: "P1"},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test", Parent: "P2"},
+		Frontmatter: domain.Frontmatter{Title: "Test", JiraParent: "P2"},
 		Description: "Desc",
 	}
 
@@ -77,20 +77,20 @@ func TestHashComputer_DifferentParentDifferentHash(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_DifferentDependenciesDifferentHash(t *testing.T) {
+func TestHashComputer_DifferentJiraDependenciesDifferentHash(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"A"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"A"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"B"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"B"},
 		},
 		Description: "Desc",
 	}
@@ -102,11 +102,11 @@ func TestHashComputer_DifferentDependenciesDifferentHash(t *testing.T) {
 
 func TestHashComputer_DifferentDescriptionDifferentHash(t *testing.T) {
 	task1 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test", Parent: "P"},
+		Frontmatter: domain.Frontmatter{Title: "Test", JiraParent: "P"},
 		Description: "Desc1",
 	}
 	task2 := &domain.TaskFile{
-		Frontmatter: domain.Frontmatter{Title: "Test", Parent: "P"},
+		Frontmatter: domain.Frontmatter{Title: "Test", JiraParent: "P"},
 		Description: "Desc2",
 	}
 
@@ -115,20 +115,20 @@ func TestHashComputer_DifferentDescriptionDifferentHash(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_DependencyOrderMatters(t *testing.T) {
+func TestHashComputer_JiraDependencyOrderMatters(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"A", "B"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"A", "B"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{"B", "A"},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{"B", "A"},
 		},
 		Description: "Desc",
 	}
@@ -139,26 +139,30 @@ func TestHashComputer_DependencyOrderMatters(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_IgnoresJiraFields(t *testing.T) {
+func TestHashComputer_IgnoresJiraFieldsAndSyncDependencies(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:       "Test",
-			Parent:      "P",
-			JiraNumber:  "",
-			JiraURL:     "",
-			SyncStatus:  "pending",
-			ContentHash: "",
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraNumber:       "",
+			JiraURL:          "",
+			SyncStatus:       "pending",
+			ContentHash:      "",
+			SyncDependencies: []string{}, // sync-dependencies should be ignored
+			JiraDependencies: []string{"A"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:       "Test",
-			Parent:      "P",
-			JiraNumber:  "GUARD-101",
-			JiraURL:     "https://jira.com/GUARD-101",
-			SyncStatus:  "linked",
-			ContentHash: "abc123",
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraNumber:       "GUARD-101",
+			JiraURL:          "https://jira.com/GUARD-101",
+			SyncStatus:       "linked",
+			ContentHash:      "abc123",
+			SyncDependencies: []string{"X", "Y", "Z"}, // different sync-deps should be ignored
+			JiraDependencies: []string{"A"},
 		},
 		Description: "Desc",
 	}
@@ -169,20 +173,20 @@ func TestHashComputer_IgnoresJiraFields(t *testing.T) {
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_EmptyDependencies(t *testing.T) {
+func TestHashComputer_EmptyJiraDependencies(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: nil,
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: nil,
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:        "Test",
-			Parent:       "P",
-			Dependencies: []string{},
+			Title:            "Test",
+			JiraParent:       "P",
+			JiraDependencies: []string{},
 		},
 		Description: "Desc",
 	}
@@ -190,5 +194,33 @@ func TestHashComputer_EmptyDependencies(t *testing.T) {
 	hasher := NewSHA256HashComputer()
 
 	// nil and empty slice should produce same hash
+	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+}
+
+func TestHashComputer_SyncDependenciesNotIncluded(t *testing.T) {
+	// Test that changing sync-dependencies does NOT change the hash
+	// since sync-deps only affect creation order, not Jira content
+	task1 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:            "Test",
+			JiraParent:       "P",
+			SyncDependencies: []string{"A", "B"},
+			JiraDependencies: []string{"X"},
+		},
+		Description: "Desc",
+	}
+	task2 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:            "Test",
+			JiraParent:       "P",
+			SyncDependencies: []string{"C", "D", "E"}, // Different sync deps
+			JiraDependencies: []string{"X"},           // Same jira deps
+		},
+		Description: "Desc",
+	}
+
+	hasher := NewSHA256HashComputer()
+
+	// Hash should be the same since only jira-dependencies are included
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }

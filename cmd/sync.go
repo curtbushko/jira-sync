@@ -299,7 +299,7 @@ func buildTaskMap(tasks []*domain.TaskFile) map[string]*domain.TaskFile {
 }
 
 func printLinkedDependencies(task *domain.TaskFile, taskMap map[string]*domain.TaskFile) {
-	for _, dep := range task.Frontmatter.Dependencies {
+	for _, dep := range task.Frontmatter.JiraDependencies {
 		if depTask, ok := taskMap[dep]; ok {
 			color.Green("✓ %s blocked by %s", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)
 		}
@@ -343,11 +343,11 @@ func showDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.TaskF
 
 	var hasLinks bool
 	for _, task := range created {
-		if len(task.Frontmatter.Dependencies) == 0 {
+		if len(task.Frontmatter.JiraDependencies) == 0 {
 			continue
 		}
 		if !hasLinks {
-			fmt.Println("\nDependencies to link:")
+			fmt.Println("\nJira-dependencies to link:")
 			hasLinks = true
 		}
 		printDependencyLinks(task, idMap)
@@ -355,7 +355,7 @@ func showDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.TaskF
 }
 
 func printDependencyLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFile) {
-	for _, depID := range task.Frontmatter.Dependencies {
+	for _, depID := range task.Frontmatter.JiraDependencies {
 		depTask := idMap[depID]
 		if depTask != nil && depTask.Frontmatter.JiraNumber != "" {
 			fmt.Printf("  - %s blocked by %s\n", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)

@@ -78,7 +78,7 @@ func FuzzCategorizeTasks(f *testing.F) {
 				Title:       "KB-1: Test",
 				SyncStatus:  status,
 				JiraNumber:  jiraNumber,
-				Parent:      "GUARD-100",
+				JiraParent:      "GUARD-100",
 				ContentHash: "",
 			},
 			Description: "Test description",
