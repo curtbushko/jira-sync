@@ -167,3 +167,39 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 func (c *Client) BaseURL() string {
 	return c.baseURL
 }
+
+// GetTransitions returns available transitions for an issue.
+func (c *Client) GetTransitions(ctx context.Context, key string) ([]ports.Transition, error) {
+	transitions, resp, err := c.client.Issue.GetTransitionsWithContext(ctx, key)
+	if err != nil {
+		if resp != nil {
+			body := readResponseBody(resp)
+			return nil, fmt.Errorf("get transitions for %s (status: %d): %s: %w", key, resp.StatusCode, body, err)
+		}
+		return nil, fmt.Errorf("get transitions for %s: %w", key, err)
+	}
+
+	result := make([]ports.Transition, len(transitions))
+	for i, t := range transitions {
+		result[i] = ports.Transition{
+			ID:   t.ID,
+			Name: t.Name,
+		}
+	}
+
+	return result, nil
+}
+
+// DoTransition performs a workflow transition on an issue.
+func (c *Client) DoTransition(ctx context.Context, key, transitionID string) error {
+	resp, err := c.client.Issue.DoTransitionWithContext(ctx, key, transitionID)
+	if err != nil {
+		if resp != nil {
+			body := readResponseBody(resp)
+			return fmt.Errorf("%w for %s (status: %d): %s: %w", domain.ErrJiraTransitionFailed, key, resp.StatusCode, body, err)
+		}
+		return fmt.Errorf("%w for %s: %w", domain.ErrJiraTransitionFailed, key, err)
+	}
+
+	return nil
+}

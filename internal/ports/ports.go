@@ -48,6 +48,12 @@ type UpdateIssueRequest struct {
 	Description string
 }
 
+// Transition represents a Jira workflow transition.
+type Transition struct {
+	ID   string // Transition ID used by Jira API
+	Name string // Human-readable transition name (e.g., "In Progress", "Done")
+}
+
 // JiraClient handles all Jira API operations.
 type JiraClient interface {
 	// CreateIssue creates a new issue and returns the created issue with key.
@@ -62,6 +68,12 @@ type JiraClient interface {
 
 	// GetIssue fetches an issue by key.
 	GetIssue(ctx context.Context, key string) (*Issue, error)
+
+	// GetTransitions returns available transitions for an issue.
+	GetTransitions(ctx context.Context, key string) ([]Transition, error)
+
+	// DoTransition performs a workflow transition on an issue.
+	DoTransition(ctx context.Context, key, transitionID string) error
 
 	// BaseURL returns the Jira instance base URL.
 	BaseURL() string

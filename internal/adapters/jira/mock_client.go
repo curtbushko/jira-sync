@@ -14,16 +14,20 @@ type MockJiraClient struct {
 	mu sync.Mutex
 
 	// Function hooks for customizing behavior
-	CreateIssueFunc func(ctx context.Context, req ports.CreateIssueRequest) (*ports.Issue, error)
-	UpdateIssueFunc func(ctx context.Context, key string, req ports.UpdateIssueRequest) error
-	CreateLinkFunc  func(ctx context.Context, inward, outward, linkType string) error
-	GetIssueFunc    func(ctx context.Context, key string) (*ports.Issue, error)
+	CreateIssueFunc    func(ctx context.Context, req ports.CreateIssueRequest) (*ports.Issue, error)
+	UpdateIssueFunc    func(ctx context.Context, key string, req ports.UpdateIssueRequest) error
+	CreateLinkFunc     func(ctx context.Context, inward, outward, linkType string) error
+	GetIssueFunc       func(ctx context.Context, key string) (*ports.Issue, error)
+	GetTransitionsFunc func(ctx context.Context, key string) ([]ports.Transition, error)
+	DoTransitionFunc   func(ctx context.Context, key, transitionID string) error
 
 	// Call tracking
-	CreateIssueCalls []ports.CreateIssueRequest
-	UpdateIssueCalls []UpdateIssueCall
-	CreateLinkCalls  []CreateLinkCall
-	GetIssueCalls    []string
+	CreateIssueCalls    []ports.CreateIssueRequest
+	UpdateIssueCalls    []UpdateIssueCall
+	CreateLinkCalls     []CreateLinkCall
+	GetIssueCalls       []string
+	GetTransitionsCalls []string
+	DoTransitionCalls   []DoTransitionCall
 
 	// Auto-increment for issue keys
 	issueCounter int
@@ -41,6 +45,12 @@ type CreateLinkCall struct {
 	Inward   string
 	Outward  string
 	LinkType string
+}
+
+// DoTransitionCall records a call to DoTransition.
+type DoTransitionCall struct {
+	Key          string
+	TransitionID string
 }
 
 // NewMockJiraClient creates a new MockJiraClient.
@@ -123,6 +133,40 @@ func (m *MockJiraClient) BaseURL() string {
 	return m.baseURL
 }
 
+// GetTransitions returns available transitions for an issue.
+func (m *MockJiraClient) GetTransitions(ctx context.Context, key string) ([]ports.Transition, error) {
+	m.mu.Lock()
+	m.GetTransitionsCalls = append(m.GetTransitionsCalls, key)
+	m.mu.Unlock()
+
+	if m.GetTransitionsFunc != nil {
+		return m.GetTransitionsFunc(ctx, key)
+	}
+
+	// Default: return common transitions
+	return []ports.Transition{
+		{ID: "11", Name: "To Do"},
+		{ID: "21", Name: "In Progress"},
+		{ID: "31", Name: "Done"},
+	}, nil
+}
+
+// DoTransition performs a workflow transition on an issue.
+func (m *MockJiraClient) DoTransition(ctx context.Context, key, transitionID string) error {
+	m.mu.Lock()
+	m.DoTransitionCalls = append(m.DoTransitionCalls, DoTransitionCall{
+		Key:          key,
+		TransitionID: transitionID,
+	})
+	m.mu.Unlock()
+
+	if m.DoTransitionFunc != nil {
+		return m.DoTransitionFunc(ctx, key, transitionID)
+	}
+
+	return nil
+}
+
 // SetBaseURL sets the base URL for the mock client.
 func (m *MockJiraClient) SetBaseURL(url string) {
 	m.baseURL = url
@@ -136,5 +180,7 @@ func (m *MockJiraClient) Reset() {
 	m.UpdateIssueCalls = nil
 	m.CreateLinkCalls = nil
 	m.GetIssueCalls = nil
+	m.GetTransitionsCalls = nil
+	m.DoTransitionCalls = nil
 	m.issueCounter = 0
 }

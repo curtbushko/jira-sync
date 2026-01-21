@@ -13,10 +13,12 @@ var (
 	ErrMissingDescription   = errors.New("description is required")
 	ErrDependencyNotFound   = errors.New("dependency not found")
 	ErrCircularDependency   = errors.New("circular dependency detected")
-	ErrJiraAuthentication   = errors.New("jira authentication failed")
-	ErrJiraCreateFailed     = errors.New("failed to create jira issue")
-	ErrJiraUpdateFailed     = errors.New("failed to update jira issue")
-	ErrJiraLinkFailed       = errors.New("failed to create jira link")
+	ErrJiraAuthentication     = errors.New("jira authentication failed")
+	ErrJiraCreateFailed       = errors.New("failed to create jira issue")
+	ErrJiraUpdateFailed       = errors.New("failed to update jira issue")
+	ErrJiraLinkFailed         = errors.New("failed to create jira link")
+	ErrJiraTransitionFailed   = errors.New("failed to transition jira issue")
+	ErrTransitionNotAvailable = errors.New("transition not available")
 )
 
 // ValidationError wraps a validation error with field context.
