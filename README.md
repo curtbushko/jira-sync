@@ -29,17 +29,30 @@ go build -o jira-sync .
 
 ### Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `JIRA_TOKEN` | **Yes** | Jira API token |
-| `JIRA_URL` | Yes* | Jira instance URL (e.g., `https://company.atlassian.net`) |
-| `JIRA_USER` | Yes* | Jira username/email |
-| `JIRA_DEFAULTS_PROJECT` | No | Default project key |
-| `JIRA_DEFAULTS_ISSUE_TYPE` | No | Default issue type (default: `Task`) |
-| `JIRA_DEFAULTS_END_DATE_OFFSET` | No | Days to add for end date (default: `7`) |
-| `JIRA_LINK_TYPES_DEPENDENCY` | No | Link type name (default: `Blocks`) |
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `JIRA_TOKEN` | **Yes** | Jira API token | `ATATT3xFfGF0abc123...` |
+| `JIRA_URL` | Yes* | Jira instance URL | `https://company.atlassian.net` |
+| `JIRA_USER` | Yes* | Jira username/email | `user@company.com` |
+| `JIRA_DEFAULTS_PROJECT` | No | Default project key | `MYPROJ` |
+| `JIRA_DEFAULTS_ISSUE_TYPE` | No | Default issue type (default: `Task`) | `Story`, `Bug`, `Task` |
+| `JIRA_DEFAULTS_END_DATE_OFFSET` | No | Days to add for end date (default: `7`) | `14` |
+| `JIRA_LINK_TYPES_DEPENDENCY` | No | Link type name (default: `Blocks`) | `Blocks`, `Relates` |
 
 *Can also be set in config file
+
+#### Example Setup
+
+```bash
+# Required
+export JIRA_TOKEN="ATATT3xFfGF0abc123def456..."
+export JIRA_URL="https://mycompany.atlassian.net"
+export JIRA_USER="developer@mycompany.com"
+
+# Optional defaults
+export JIRA_DEFAULTS_PROJECT="MYPROJ"
+export JIRA_DEFAULTS_ISSUE_TYPE="Task"
+```
 
 ### Config File (~/.jira-sync.yaml)
 
@@ -203,6 +216,7 @@ Initialize the Kubebuilder project using the CLI tool.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `title` | string | **Yes** | Task ID and title (e.g., "KB-1: Initialize Project") |
+| `project` | string | No | Jira project key (overrides default, e.g., "MYPROJ") |
 | `jira-number` | string | No | Jira issue key (auto-set after creation, e.g., "GUARD-101") |
 | `created-date` | date | No | Date file was created (auto-set by `create`) |
 | `start-date` | date | No | Date ticket created in Jira (auto-set by `sync`) |
@@ -228,6 +242,16 @@ title: "KB-1: Kubebuilder - Initialize Project and Repository"
 #       ^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 #       ID    Human readable title
 ```
+
+#### `project`
+
+Optional Jira project key for this task. If set, overrides the default project from `--project` flag or `JIRA_DEFAULTS_PROJECT` environment variable.
+
+```yaml
+project: "BACKEND"  # This task goes to BACKEND project instead of the default
+```
+
+Useful when tasks in the same directory need to go to different Jira projects.
 
 #### `sync-status`
 
@@ -346,7 +370,7 @@ Usage:
   jira-sync sync [tasks-dir] [flags]
 
 Flags:
-  -p, --project string   Jira project key (required)
+  -p, --project string   Default Jira project key (can also be set per-task in frontmatter)
       --dry-run          Show what would happen without making changes
   -y, --yes              Skip confirmation prompts
       --create-only      Only create tickets, don't link dependencies

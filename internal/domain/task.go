@@ -11,6 +11,7 @@ type TaskFile struct {
 // Frontmatter contains the YAML frontmatter fields of a task file.
 type Frontmatter struct {
 	Title        string   `yaml:"title"`
+	Project      string   `yaml:"project,omitempty"`
 	JiraNumber   string   `yaml:"jira-number"`
 	CreatedDate  string   `yaml:"created-date"`
 	StartDate    string   `yaml:"start-date"`

@@ -72,18 +72,13 @@ func init() {
 }
 
 var (
-	errProjectRequired = errors.New("--project is required (or set JIRA_DEFAULTS_PROJECT)")
-	errJiraURLRequired = errors.New("jira.url is required (set JIRA_URL or use config file)")
-	errJiraUserRequired = errors.New("jira.user is required (set JIRA_USER or use config file)")
+	errJiraURLRequired   = errors.New("jira.url is required (set JIRA_URL or use config file)")
+	errJiraUserRequired  = errors.New("jira.user is required (set JIRA_USER or use config file)")
 	errJiraTokenRequired = errors.New("JIRA_TOKEN environment variable is required")
 )
 
 func runSync(cmd *cobra.Command, args []string) error {
 	flags := parseSyncFlags(cmd, args)
-
-	if !flags.statusOnly && flags.project == "" {
-		return errProjectRequired
-	}
 
 	repo := filesystem.NewFileTaskRepository()
 	tasks, categorized, err := loadAndCategorizeTasks(flags.tasksDir, repo)

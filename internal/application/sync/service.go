@@ -87,10 +87,17 @@ func (s *Service) needsResync(task *domain.TaskFile) bool {
 
 // CreateTickets creates Jira tickets for pending tasks.
 // Fields are validated and truncated if they exceed Jira limits.
-func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, project, issueType string) error {
+// Uses task's project if set, otherwise falls back to defaultProject.
+func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, defaultProject, issueType string) error {
 	now := time.Now()
 
 	for _, task := range tasks {
+		// Use task's project if set, otherwise use default
+		project := task.Frontmatter.Project
+		if project == "" {
+			project = defaultProject
+		}
+
 		// Validate and truncate fields before sending to Jira
 		summary, description := s.validateTaskFields(task)
 
