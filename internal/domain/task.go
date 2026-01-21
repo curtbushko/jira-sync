@@ -93,3 +93,34 @@ func parseWikiLinkTaskID(link string) string {
 	// Legacy format: plain task ID
 	return strings.TrimSpace(link)
 }
+
+// MigrateFrontmatter adds missing fields with default values.
+// Returns true if any fields were migrated, false if no changes were needed.
+func (t *TaskFile) MigrateFrontmatter() bool {
+	migrated := false
+
+	// Set default JiraState if empty
+	if t.Frontmatter.JiraState == "" {
+		t.Frontmatter.JiraState = DefaultJiraState
+		migrated = true
+	}
+
+	// Set default SyncStatus if empty
+	if t.Frontmatter.SyncStatus == "" {
+		t.Frontmatter.SyncStatus = SyncStatusPending
+		migrated = true
+	}
+
+	// Initialize nil slices to empty slices
+	if t.Frontmatter.SyncDependencies == nil {
+		t.Frontmatter.SyncDependencies = []string{}
+		migrated = true
+	}
+
+	if t.Frontmatter.JiraDependencies == nil {
+		t.Frontmatter.JiraDependencies = []string{}
+		migrated = true
+	}
+
+	return migrated
+}

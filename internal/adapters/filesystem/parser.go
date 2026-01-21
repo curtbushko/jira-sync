@@ -33,11 +33,16 @@ func (p *Parser) Parse(path, content string) (*domain.TaskFile, error) {
 		return nil, domain.NewParseError(path, err)
 	}
 
-	return &domain.TaskFile{
+	task := &domain.TaskFile{
 		Path:        path,
 		Frontmatter: frontmatterData,
 		Description: strings.TrimSpace(body),
-	}, nil
+	}
+
+	// Migrate frontmatter to add any missing fields with defaults
+	task.MigrateFrontmatter()
+
+	return task, nil
 }
 
 // splitFrontmatter splits content into frontmatter and body.

@@ -227,3 +227,115 @@ func TestParseWikiLinkTaskID(t *testing.T) {
 		})
 	}
 }
+
+// Phase 10: Frontmatter Migration Tests
+
+func TestMigrateFrontmatter_MissingFields(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraParent: "GUARD-100",
+			// All other fields missing
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.True(t, migrated, "should return true when fields were added")
+	assert.Equal(t, DefaultJiraState, task.Frontmatter.JiraState)
+	assert.Equal(t, SyncStatusPending, task.Frontmatter.SyncStatus)
+	assert.NotNil(t, task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraDependencies)
+	assert.Empty(t, task.Frontmatter.SyncDependencies)
+	assert.Empty(t, task.Frontmatter.JiraDependencies)
+}
+
+func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:            "KB-1: Test Task",
+			JiraNumber:       "GUARD-123",
+			JiraProject:      "GUARD",
+			JiraState:        "In Progress",
+			SyncStatus:       SyncStatusLinked,
+			JiraParent:       "GUARD-100",
+			SyncDependencies: []string{"KB-0"},
+			JiraDependencies: []string{"KB-0"},
+			ContentHash:      "abc123",
+			LastSynced:       "2026-01-20T10:00:00Z",
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.False(t, migrated, "should return false when no migration needed")
+	assert.Equal(t, "In Progress", task.Frontmatter.JiraState) // unchanged
+	assert.Equal(t, SyncStatusLinked, task.Frontmatter.SyncStatus) // unchanged
+}
+
+func TestMigrateFrontmatter_PartialFields(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:      "KB-1: Test",
+			JiraState:  "Done", // already set
+			SyncStatus: "",     // missing
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.True(t, migrated)
+	assert.Equal(t, "Done", task.Frontmatter.JiraState)       // preserved
+	assert.Equal(t, SyncStatusPending, task.Frontmatter.SyncStatus) // set default
+	assert.NotNil(t, task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraDependencies)
+}
+
+func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
+	existingDeps := []string{"[KB-0: Prereq](prereq.md)"}
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:            "KB-1: Test",
+			JiraNumber:       "GUARD-999",
+			JiraProject:      "PROJ",
+			JiraState:        "In Review",
+			SyncStatus:       SyncStatusCreated,
+			JiraParent:       "GUARD-100",
+			SyncDependencies: existingDeps,
+			JiraDependencies: existingDeps,
+			ContentHash:      "existinghash",
+			LastSynced:       "2026-01-15T08:00:00Z",
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.False(t, migrated, "should not migrate when all fields present")
+	assert.Equal(t, "GUARD-999", task.Frontmatter.JiraNumber)
+	assert.Equal(t, "PROJ", task.Frontmatter.JiraProject)
+	assert.Equal(t, "In Review", task.Frontmatter.JiraState)
+	assert.Equal(t, SyncStatusCreated, task.Frontmatter.SyncStatus)
+	assert.Equal(t, existingDeps, task.Frontmatter.SyncDependencies)
+	assert.Equal(t, existingDeps, task.Frontmatter.JiraDependencies)
+	assert.Equal(t, "existinghash", task.Frontmatter.ContentHash)
+	assert.Equal(t, "2026-01-15T08:00:00Z", task.Frontmatter.LastSynced)
+}
+
+func TestMigrateFrontmatter_InitializesEmptySlices(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:            "KB-1: Test",
+			SyncDependencies: nil, // nil slice
+			JiraDependencies: nil, // nil slice
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.True(t, migrated)
+	// Should be non-nil empty slices after migration
+	assert.NotNil(t, task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraDependencies)
+	assert.Len(t, task.Frontmatter.SyncDependencies, 0)
+	assert.Len(t, task.Frontmatter.JiraDependencies, 0)
+}

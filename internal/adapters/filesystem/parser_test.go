@@ -217,3 +217,52 @@ Second paragraph.
 	assert.Contains(t, task.Description, "Second paragraph.")
 	assert.Contains(t, task.Description, "- List item 1")
 }
+
+func TestParser_Parse_AutoMigration(t *testing.T) {
+	// Old format file missing jira-state and sync-status, with nil slices
+	content := `---
+title: "KB-1: Old Task"
+jira-parent: GUARD-100
+---
+
+Old task description.`
+
+	parser := NewParser()
+	task, err := parser.Parse("old-task.md", content)
+
+	require.NoError(t, err)
+	// Should have default values from migration
+	assert.Equal(t, "Todo", task.Frontmatter.JiraState)
+	assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
+	// Slices should be non-nil empty
+	assert.NotNil(t, task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraDependencies)
+	assert.Empty(t, task.Frontmatter.SyncDependencies)
+	assert.Empty(t, task.Frontmatter.JiraDependencies)
+}
+
+func TestParser_Parse_PreservesExistingValues(t *testing.T) {
+	// File with existing values should not be overwritten
+	content := `---
+title: "KB-1: Existing Task"
+jira-state: Done
+sync-status: linked
+jira-parent: GUARD-100
+sync-dependencies:
+  - KB-0
+jira-dependencies:
+  - KB-0
+---
+
+Task description.`
+
+	parser := NewParser()
+	task, err := parser.Parse("existing-task.md", content)
+
+	require.NoError(t, err)
+	// Should preserve existing values
+	assert.Equal(t, "Done", task.Frontmatter.JiraState)
+	assert.Equal(t, "linked", task.Frontmatter.SyncStatus)
+	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.SyncDependencies)
+	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraDependencies)
+}
