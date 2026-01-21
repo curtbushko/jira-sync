@@ -3,6 +3,7 @@ package ports
 
 import (
 	"context"
+	"time"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
 )
@@ -29,6 +30,7 @@ type Issue struct {
 	Summary     string
 	Description string
 	Status      string
+	Updated     time.Time // Last updated timestamp from Jira
 }
 
 // CreateIssueRequest contains the data needed to create a Jira issue.
