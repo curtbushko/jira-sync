@@ -42,8 +42,8 @@ type syncContext struct {
 }
 
 var syncCmd = &cobra.Command{
-	Use:   "sync [tasks-dir]",
-	Short: "Sync task files with Jira",
+	Use:   "sync [tasks-dir] (default: .)",
+	Short: "Sync task files with Jira (default dir: .)",
 	Long: `Synchronize all task files with Jira.
 
 This command handles the full lifecycle:
@@ -51,8 +51,11 @@ This command handles the full lifecycle:
 - Links dependencies for 'created' tasks
 - Updates local files with Jira data
 
+Arguments:
+  tasks-dir   Directory containing task files (default: current directory)
+
 Example:
-  jira-sync sync ./tasks/ --project GUARD
+  jira-sync sync --project GUARD
   jira-sync sync ./tasks/ --project GUARD --dry-run`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runSync,
@@ -113,7 +116,7 @@ func runSync(cmd *cobra.Command, args []string) error {
 }
 
 func parseSyncFlags(cmd *cobra.Command, args []string) syncFlags {
-	tasksDir := "./tasks"
+	tasksDir := "."
 	if len(args) > 0 {
 		tasksDir = args[0]
 	}

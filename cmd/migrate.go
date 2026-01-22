@@ -17,17 +17,20 @@ type migrateFlags struct {
 }
 
 var migrateCmd = &cobra.Command{
-	Use:   "migrate [tasks-dir]",
-	Short: "Migrate task files to add missing frontmatter fields",
+	Use:   "migrate [tasks-dir] (default: .)",
+	Short: "Migrate task files to add missing frontmatter fields (default dir: .)",
 	Long: `Migrate older task files by adding missing frontmatter fields.
 
 This command scans all task files and adds any missing frontmatter fields
 with sensible defaults. This ensures backwards compatibility when new
 fields are added to the schema.
 
+Arguments:
+  tasks-dir   Directory containing task files (default: current directory)
+
 Example:
-  jira-sync migrate ./tasks/
-  jira-sync migrate ./tasks/ --dry-run
+  jira-sync migrate
+  jira-sync migrate --dry-run
   jira-sync migrate ./tasks/ --default-project GUARD`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runMigrate,
