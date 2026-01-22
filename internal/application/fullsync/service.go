@@ -2,18 +2,23 @@ package fullsync
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 )
 
+// LinkTypeBlocks is the Jira link type for blocking relationships.
+const LinkTypeBlocks = "Blocks"
+
 // SyncResult represents the result of syncing a single task.
 type SyncResult struct {
-	Task   *domain.TaskFile
-	Type   ChangeType
-	Fields []string
-	Error  error
+	Task             *domain.TaskFile
+	Type             ChangeType
+	Fields           []string
+	DependencyResult *DependencyChangeResult // nil if no dependency changes
+	Error            error
 }
 
 // Service handles bidirectional sync between local files and Jira.
@@ -21,6 +26,7 @@ type Service struct {
 	jira     ports.JiraClient
 	hasher   ports.HashComputer
 	detector *ChangeDetector
+	allTasks []*domain.TaskFile // All tasks for dependency mapping
 }
 
 // NewService creates a new fullsync service.
@@ -30,6 +36,12 @@ func NewService(jira ports.JiraClient, hasher ports.HashComputer) *Service {
 		hasher:   hasher,
 		detector: NewChangeDetector(hasher),
 	}
+}
+
+// SetAllTasks sets the list of all tasks for dependency mapping.
+// Must be called before syncing tasks with jira-dependencies.
+func (s *Service) SetAllTasks(tasks []*domain.TaskFile) {
+	s.allTasks = tasks
 }
 
 // SyncTask syncs a single task bidirectionally.
@@ -71,10 +83,20 @@ func (s *Service) SyncTask(ctx context.Context, task *domain.TaskFile) (*SyncRes
 		// Nothing to do
 	}
 
+	// Also sync jira-dependencies (if allTasks is set and no conflict)
+	var depResult *DependencyChangeResult
+	if s.allTasks != nil && changeResult.Type != ChangeTypeConflict {
+		depResult, err = s.syncDependencies(ctx, task)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &SyncResult{
-		Task:   task,
-		Type:   changeResult.Type,
-		Fields: changeResult.Fields,
+		Task:             task,
+		Type:             changeResult.Type,
+		Fields:           changeResult.Fields,
+		DependencyResult: depResult,
 	}, nil
 }
 
@@ -120,4 +142,52 @@ func (s *Service) pullFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 func (s *Service) updateLastSynced(task *domain.TaskFile) {
 	task.Frontmatter.LastSynced = time.Now().UTC().Format(time.RFC3339)
 	task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
+}
+
+// syncDependencies syncs jira-dependencies between local and Jira.
+// Returns the dependency change result, or nil if no dependencies to sync.
+func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) (*DependencyChangeResult, error) {
+	// Skip if allTasks not set
+	if s.allTasks == nil {
+		return nil, nil
+	}
+
+	// Get current Jira links
+	jiraLinks, err := s.jira.GetIssueLinks(ctx, task.Frontmatter.JiraNumber)
+	if err != nil {
+		return nil, fmt.Errorf("get issue links for %s: %w", task.Frontmatter.JiraNumber, err)
+	}
+
+	// Detect dependency changes
+	depResult := s.detector.DetectDependencyChanges(task, jiraLinks, s.allTasks)
+
+	if !depResult.HasChanges {
+		return &depResult, nil
+	}
+
+	// Apply changes: remove stale links
+	for _, linkID := range depResult.ToRemove {
+		if err := s.jira.DeleteLink(ctx, linkID); err != nil {
+			return nil, fmt.Errorf("delete link %s: %w", linkID, err)
+		}
+	}
+
+	// Apply changes: add new links
+	for _, blockerKey := range depResult.ToAdd {
+		// Create "Blocks" link: blockerKey blocks task.JiraNumber
+		if err := s.jira.CreateLink(ctx, task.Frontmatter.JiraNumber, blockerKey, LinkTypeBlocks); err != nil {
+			return nil, fmt.Errorf("create link %s -> %s: %w", blockerKey, task.Frontmatter.JiraNumber, err)
+		}
+	}
+
+	return &depResult, nil
+}
+
+// SyncDependenciesOnly syncs only jira-dependencies for a task.
+// Useful when you want to sync dependencies without syncing other fields.
+func (s *Service) SyncDependenciesOnly(ctx context.Context, task *domain.TaskFile) (*DependencyChangeResult, error) {
+	if task.Frontmatter.JiraNumber == "" {
+		return nil, nil
+	}
+	return s.syncDependencies(ctx, task)
 }

@@ -573,7 +573,7 @@ jira-sync full-sync [tasks-dir] [flags]
 | `--dry-run` | | No | Show what would change without making changes |
 | `--yes` | `-y` | No | Skip confirmation prompts |
 | `--direction` | `-d` | No | Sync direction: `local` (local wins), `jira` (Jira wins), `ask` (prompt for conflicts). Default: `ask` |
-| `--fields` | `-f` | No | Comma-separated fields to sync (default: all). Options: `title`, `description`, `state`, `jira-parent` |
+| `--fields` | `-f` | No | Comma-separated fields to sync (default: all). Options: `title`, `description`, `state`, `jira-parent`, `jira-dependencies` |
 
 **Fields Synchronized:**
 
@@ -583,8 +583,27 @@ jira-sync full-sync [tasks-dir] [flags]
 | Description (body) | `description` | Markdown body content |
 | `jira-state` | `status` | Ticket status (Todo, In Progress, Done, etc.) |
 | `jira-parent` | `parent` | Parent epic/story |
+| `jira-dependencies` | Issue links | "Blocks" links between tickets |
 | `start-date` | Custom field | Start date |
 | `end-date` | Custom field | End date |
+
+**Jira-Dependencies Sync:**
+
+The `jira-dependencies` field requires special handling because it maps to Jira issue links (not a simple field):
+
+1. **Local → Jira**: When `jira-dependencies` changes locally:
+   - Add new "blocks" links for dependencies added to the array
+   - Remove "blocks" links for dependencies removed from the array
+   - Links are identified by matching the local task ID to its Jira issue key
+
+2. **Jira → Local**: When Jira links change:
+   - Scan all inward "blocks" links on the ticket
+   - Map Jira issue keys back to local task IDs (using the task files)
+   - Update the `jira-dependencies` array to match
+
+3. **Conflict Resolution**: If both local and Jira links changed:
+   - Same conflict resolution as other fields (local/jira/ask)
+   - Shows diff of which dependencies were added/removed on each side
 
 **Examples:**
 
@@ -655,34 +674,49 @@ Changes detected:
   Local → Jira (local file changed):
     - KB-2: description updated
     - ERR-3: title updated
+    - CTRL-2: jira-dependencies updated (added: ERR-1)
 
   Jira → Local (Jira ticket changed):
     - CTRL-1: status changed (Todo → In Progress)
     - MET-5: description updated by teammate
+    - ERR-4: jira-dependencies changed (added: ERR-3)
 
   CONFLICTS (both changed):
     - ERR-7: description differs
       Local:  "Implement container terminated state..."
       Jira:   "Updated by PM: Implement container..."
       [L]ocal wins / [J]ira wins / [S]kip?
+    - CTRL-3: jira-dependencies differs
+      Local:  "KB-3, ERR-1, ERR-2"
+      Jira:   "KB-3, ERR-1"
+      [L]ocal wins / [J]ira wins / [S]kip?
 
-  In sync: 42 tasks
+  In sync: 41 tasks
 
-Apply 4 changes? [y/N] y
+Apply 8 changes? [y/N] y
 
 Updating Jira...
 ✓ KB-2: description updated
 ✓ ERR-3: title updated
+✓ CTRL-2: jira-dependencies updated
+  + Added: GUARD-115 blocked by GUARD-108
 
 Updating local files...
 ✓ CTRL-1: status → In Progress
 ✓ MET-5: description updated
+✓ ERR-4: jira-dependencies updated
+  - Added dependency: [ERR-3: Progress Deadline Detection](20260116-103005.md)
+
+Resolving conflicts...
+✓ ERR-7: conflict resolved (local wins)
+✓ CTRL-3: conflict resolved (local wins)
+  + Added: GUARD-118 blocked by GUARD-105
 
 Summary:
-  ✓ 2 Jira tickets updated
-  ✓ 2 local files updated
-  ✓ 1 conflict resolved (local wins)
-  ✓ 42 tasks already in sync
+  ✓ 4 Jira tickets updated (including 2 with link changes)
+  ✓ 3 local files updated
+  ✓ 2 conflicts resolved (local wins)
+  ✓ 41 tasks already in sync
 ```
 
 **New Frontmatter Field:**
@@ -1486,8 +1520,8 @@ func runFullSync(cmd *cobra.Command, args []string) error {
         return fmt.Errorf("create jira client: %w", err)
     }
 
-    // Create full-sync service
-    syncer := sync.NewFullSyncer(client, cfg, parseFields(fieldsStr))
+    // Create full-sync service (pass all tasks for jira-dependencies mapping)
+    syncer := sync.NewFullSyncer(client, cfg, parseFields(fieldsStr), tasks)
 
     // Compare all tasks
     color.Cyan("Comparing fields...\n")
@@ -1623,15 +1657,17 @@ type Conflict struct {
 type FullSyncer struct {
     jiraClient *jira.Client
     cfg        *config.Config
-    fields     []string // fields to sync, empty = all
+    fields     []string                // fields to sync, empty = all
+    allTasks   []*markdown.TaskFile    // all tasks for Jira key ↔ task ID mapping
 }
 
 // NewFullSyncer creates a new full sync service
-func NewFullSyncer(client *jira.Client, cfg *config.Config, fields []string) *FullSyncer {
+func NewFullSyncer(client *jira.Client, cfg *config.Config, fields []string, allTasks []*markdown.TaskFile) *FullSyncer {
     return &FullSyncer{
         jiraClient: client,
         cfg:        cfg,
         fields:     fields,
+        allTasks:   allTasks,
     }
 }
 
@@ -1739,7 +1775,73 @@ func (s *FullSyncer) compareFields(task *markdown.TaskFile, issue *jira.Issue) [
         }
     }
 
+    // Jira-Dependencies (issue links)
+    if s.shouldSync("jira-dependencies") {
+        localDeps := task.GetJiraDependencyIDs()
+        jiraDeps := s.extractBlockingLinks(issue)
+
+        if !stringSlicesEqual(localDeps, jiraDeps) {
+            diffs = append(diffs, FieldComparison{
+                Field:      "jira-dependencies",
+                LocalValue: strings.Join(localDeps, ", "),
+                JiraValue:  strings.Join(jiraDeps, ", "),
+            })
+        }
+    }
+
     return diffs
+}
+
+// extractBlockingLinks extracts task IDs from Jira "blocks" links
+// Returns the task IDs of issues that block this issue
+func (s *FullSyncer) extractBlockingLinks(issue *jira.Issue) []string {
+    var blockers []string
+
+    if issue.Fields.IssueLinks == nil {
+        return blockers
+    }
+
+    for _, link := range issue.Fields.IssueLinks {
+        // Check for inward "blocks" links (other issue blocks this one)
+        if link.Type.Name == "Blocks" && link.InwardIssue != nil {
+            // Map Jira key back to local task ID
+            if taskID := s.jiraKeyToTaskID(link.InwardIssue.Key); taskID != "" {
+                blockers = append(blockers, taskID)
+            }
+        }
+    }
+
+    sort.Strings(blockers)
+    return blockers
+}
+
+// jiraKeyToTaskID maps a Jira issue key to the local task ID
+func (s *FullSyncer) jiraKeyToTaskID(jiraKey string) string {
+    for _, task := range s.allTasks {
+        if task.Frontmatter.JiraNumber == jiraKey {
+            return task.TaskID()
+        }
+    }
+    return "" // Unknown issue, not in our task files
+}
+
+// stringSlicesEqual compares two string slices (order-independent)
+func stringSlicesEqual(a, b []string) bool {
+    if len(a) != len(b) {
+        return false
+    }
+    aCopy := make([]string, len(a))
+    bCopy := make([]string, len(b))
+    copy(aCopy, a)
+    copy(bCopy, b)
+    sort.Strings(aCopy)
+    sort.Strings(bCopy)
+    for i := range aCopy {
+        if aCopy[i] != bCopy[i] {
+            return false
+        }
+    }
+    return true
 }
 
 // jiraChangedSince checks if Jira ticket was updated after the given timestamp
@@ -1824,6 +1926,9 @@ func (s *FullSyncer) updateJira(ctx context.Context, change *Change) error {
         return s.transitionIssue(ctx, change.Task.Frontmatter.JiraNumber, change.NewValue)
     case "jira-parent":
         update["parent"] = map[string]string{"key": change.NewValue}
+    case "jira-dependencies":
+        // Dependencies require link operations, handled separately
+        return s.updateJiraDependencies(ctx, change)
     }
 
     if len(update) > 0 {
@@ -1837,6 +1942,112 @@ func (s *FullSyncer) updateJira(ctx context.Context, change *Change) error {
     return nil
 }
 
+// updateJiraDependencies syncs issue links to match local jira-dependencies
+func (s *FullSyncer) updateJiraDependencies(ctx context.Context, change *Change) error {
+    issueKey := change.Task.Frontmatter.JiraNumber
+
+    // Parse current and desired dependencies
+    currentDeps := strings.Split(change.OldValue, ", ")
+    if change.OldValue == "" {
+        currentDeps = []string{}
+    }
+    desiredDeps := strings.Split(change.NewValue, ", ")
+    if change.NewValue == "" {
+        desiredDeps = []string{}
+    }
+
+    // Calculate diffs
+    toAdd := difference(desiredDeps, currentDeps)
+    toRemove := difference(currentDeps, desiredDeps)
+
+    // Remove stale links
+    for _, depID := range toRemove {
+        blockerKey := s.taskIDToJiraKey(depID)
+        if blockerKey == "" {
+            continue // Task not found, skip
+        }
+
+        // Find and remove the link
+        if err := s.removeBlocksLink(ctx, issueKey, blockerKey); err != nil {
+            return fmt.Errorf("remove link %s blocks %s: %w", blockerKey, issueKey, err)
+        }
+        color.Yellow("  - Removed: %s no longer blocked by %s", issueKey, blockerKey)
+    }
+
+    // Add new links
+    for _, depID := range toAdd {
+        blockerKey := s.taskIDToJiraKey(depID)
+        if blockerKey == "" {
+            return fmt.Errorf("dependency %s not found in task files", depID)
+        }
+
+        link := &jira.IssueLink{
+            Type:         jira.IssueLinkType{Name: "Blocks"},
+            InwardIssue:  &jira.Issue{Key: issueKey},
+            OutwardIssue: &jira.Issue{Key: blockerKey},
+        }
+
+        if _, err := s.jiraClient.Issue.AddLink(link); err != nil {
+            return fmt.Errorf("add link %s blocks %s: %w", blockerKey, issueKey, err)
+        }
+        color.Green("  + Added: %s blocked by %s", issueKey, blockerKey)
+    }
+
+    return nil
+}
+
+// removeBlocksLink removes a "blocks" link between two issues
+func (s *FullSyncer) removeBlocksLink(ctx context.Context, blockedKey, blockerKey string) error {
+    // Fetch issue with links
+    issue, _, err := s.jiraClient.Issue.Get(blockedKey, &jira.GetQueryOptions{
+        Expand: "issuelinks",
+    })
+    if err != nil {
+        return err
+    }
+
+    // Find the link to remove
+    for _, link := range issue.Fields.IssueLinks {
+        if link.Type.Name == "Blocks" && link.InwardIssue != nil {
+            if link.InwardIssue.Key == blockerKey {
+                // Delete this link
+                _, err := s.jiraClient.Issue.DeleteLink(link.ID)
+                return err
+            }
+        }
+    }
+
+    return nil // Link not found, already removed
+}
+
+// taskIDToJiraKey maps a local task ID to its Jira issue key
+func (s *FullSyncer) taskIDToJiraKey(taskID string) string {
+    for _, task := range s.allTasks {
+        if task.TaskID() == taskID {
+            return task.Frontmatter.JiraNumber
+        }
+    }
+    return ""
+}
+
+// difference returns elements in a that are not in b
+func difference(a, b []string) []string {
+    bSet := make(map[string]bool)
+    for _, x := range b {
+        if x != "" {
+            bSet[x] = true
+        }
+    }
+
+    var diff []string
+    for _, x := range a {
+        if x != "" && !bSet[x] {
+            diff = append(diff, x)
+        }
+    }
+    return diff
+}
+
 // updateLocal updates a field in the local task file
 func (s *FullSyncer) updateLocal(change *Change) error {
     switch change.Field {
@@ -1848,12 +2059,45 @@ func (s *FullSyncer) updateLocal(change *Change) error {
         change.Task.Frontmatter.JiraState = change.NewValue
     case "jira-parent":
         change.Task.Frontmatter.JiraParent = change.NewValue
+    case "jira-dependencies":
+        // Update jira-dependencies array from Jira links
+        change.Task.Frontmatter.JiraDependencies = s.parseJiraDepsFromJira(change.NewValue)
     }
 
     // Update content hash
     change.Task.Frontmatter.ContentHash = change.Task.ComputeContentHash()
 
     return markdown.WriteTaskFile(change.Task)
+}
+
+// parseJiraDepsFromJira converts comma-separated task IDs back to wiki link format
+func (s *FullSyncer) parseJiraDepsFromJira(depsStr string) []string {
+    if depsStr == "" {
+        return []string{}
+    }
+
+    taskIDs := strings.Split(depsStr, ", ")
+    var deps []string
+
+    for _, id := range taskIDs {
+        id = strings.TrimSpace(id)
+        if id == "" {
+            continue
+        }
+
+        // Find the task file to get title and filename for wiki link format
+        for _, task := range s.allTasks {
+            if task.TaskID() == id {
+                // Format as wiki link: [KB-1: Title](filename.md)
+                filename := filepath.Base(task.Path)
+                title := strings.TrimPrefix(task.Frontmatter.Title, id+": ")
+                deps = append(deps, fmt.Sprintf("[%s: %s](%s)", id, title, filename))
+                break
+            }
+        }
+    }
+
+    return deps
 }
 ```
 
@@ -2627,6 +2871,267 @@ The upfront investment (~2-3 days) pays off in:
 
 ---
 
+## Phase 13: Jira-Dependencies Bidirectional Sync
+
+This phase adds bidirectional synchronization for `jira-dependencies` (Jira "blocks" links). Currently, the `full-sync` command syncs title, description, state, and jira-parent, but does NOT handle jira-dependencies.
+
+### Problem Statement
+
+The current implementation:
+1. **`sync` command**: Creates "blocks" links on initial sync, but never updates them
+2. **`full-sync` command**: Does not compare or sync jira-dependencies at all
+
+This means:
+- If you add a dependency locally after initial sync, it's never created in Jira
+- If someone adds/removes a link in Jira, the local file is never updated
+- The `jira-dependencies` field becomes stale after initial creation
+
+### Implementation Plan (TDD)
+
+#### Task 13.1: Add FullSyncer.allTasks Field
+
+**Goal**: Store all tasks in FullSyncer for Jira key ↔ task ID mapping
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestFullSyncer_HasAllTasks` that verifies FullSyncer stores allTasks
+2. [ ] **RUN**: Confirm test fails (allTasks field doesn't exist)
+3. [ ] **IMPLEMENT (GREEN)**: Add `allTasks []*markdown.TaskFile` field to FullSyncer struct
+4. [ ] **RUN**: Confirm test passes
+5. [ ] **REFACTOR**: Update NewFullSyncer to accept allTasks parameter
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.2: Implement extractBlockingLinks Function
+
+**Goal**: Extract task IDs from Jira issue "blocks" links
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestExtractBlockingLinks_NoLinks` - empty when no links
+2. [ ] **TEST (RED)**: Write test `TestExtractBlockingLinks_WithBlocksLinks` - extracts inward blockers
+3. [ ] **TEST (RED)**: Write test `TestExtractBlockingLinks_IgnoresOtherLinkTypes` - ignores non-"Blocks" links
+4. [ ] **TEST (RED)**: Write test `TestExtractBlockingLinks_MapsJiraKeyToTaskID` - maps GUARD-101 → KB-1
+5. [ ] **RUN**: Confirm all tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Implement extractBlockingLinks function
+7. [ ] **RUN**: Confirm all tests pass
+8. [ ] **VALIDATE**: Run full test suite, check coverage
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.3: Implement jiraKeyToTaskID Function
+
+**Goal**: Map Jira issue key back to local task ID
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestJiraKeyToTaskID_Found` - returns task ID when found
+2. [ ] **TEST (RED)**: Write test `TestJiraKeyToTaskID_NotFound` - returns empty when not found
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Implement jiraKeyToTaskID function
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.4: Implement taskIDToJiraKey Function
+
+**Goal**: Map local task ID to Jira issue key
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestTaskIDToJiraKey_Found` - returns Jira key when found
+2. [ ] **TEST (RED)**: Write test `TestTaskIDToJiraKey_NotFound` - returns empty when not found
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Implement taskIDToJiraKey function
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.5: Implement stringSlicesEqual Function
+
+**Goal**: Compare two string slices (order-independent)
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestStringSlicesEqual_BothEmpty` - returns true
+2. [ ] **TEST (RED)**: Write test `TestStringSlicesEqual_SameElements` - returns true regardless of order
+3. [ ] **TEST (RED)**: Write test `TestStringSlicesEqual_DifferentLength` - returns false
+4. [ ] **TEST (RED)**: Write test `TestStringSlicesEqual_DifferentElements` - returns false
+5. [ ] **RUN**: Confirm tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Implement stringSlicesEqual function
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.6: Add jira-dependencies to compareFields
+
+**Goal**: Include jira-dependencies in field comparison
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestCompareFields_JiraDependencies_InSync` - no diff when equal
+2. [ ] **TEST (RED)**: Write test `TestCompareFields_JiraDependencies_LocalAdded` - detects added dependency
+3. [ ] **TEST (RED)**: Write test `TestCompareFields_JiraDependencies_LocalRemoved` - detects removed dependency
+4. [ ] **TEST (RED)**: Write test `TestCompareFields_JiraDependencies_Disabled` - skipped when not in fields
+5. [ ] **RUN**: Confirm tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Add jira-dependencies comparison to compareFields
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.7: Implement difference Function
+
+**Goal**: Calculate set difference between two string slices
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestDifference_NoOverlap` - returns all of a
+2. [ ] **TEST (RED)**: Write test `TestDifference_FullOverlap` - returns empty
+3. [ ] **TEST (RED)**: Write test `TestDifference_PartialOverlap` - returns only unique to a
+4. [ ] **TEST (RED)**: Write test `TestDifference_EmptySlices` - handles empty inputs
+5. [ ] **RUN**: Confirm tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Implement difference function
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.8: Implement updateJiraDependencies Function
+
+**Goal**: Add/remove Jira "blocks" links to match local jira-dependencies
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestUpdateJiraDependencies_AddLink` - adds new link
+2. [ ] **TEST (RED)**: Write test `TestUpdateJiraDependencies_RemoveLink` - removes stale link
+3. [ ] **TEST (RED)**: Write test `TestUpdateJiraDependencies_AddAndRemove` - handles both operations
+4. [ ] **TEST (RED)**: Write test `TestUpdateJiraDependencies_NoChanges` - no-op when equal
+5. [ ] **TEST (RED)**: Write test `TestUpdateJiraDependencies_UnknownTaskID` - returns error
+6. [ ] **RUN**: Confirm tests fail
+7. [ ] **IMPLEMENT (GREEN)**: Implement updateJiraDependencies function
+8. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+**Note**: These tests will need a mock Jira client to simulate API calls.
+
+---
+
+#### Task 13.9: Implement removeBlocksLink Function
+
+**Goal**: Delete a specific "blocks" link from Jira
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestRemoveBlocksLink_Found` - deletes link when found
+2. [ ] **TEST (RED)**: Write test `TestRemoveBlocksLink_NotFound` - no error when link doesn't exist
+3. [ ] **TEST (RED)**: Write test `TestRemoveBlocksLink_APIError` - propagates API errors
+4. [ ] **RUN**: Confirm tests fail
+5. [ ] **IMPLEMENT (GREEN)**: Implement removeBlocksLink function
+6. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.10: Update updateLocal for jira-dependencies
+
+**Goal**: Update local jira-dependencies from Jira links
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestUpdateLocal_JiraDependencies` - updates array from Jira
+2. [ ] **TEST (RED)**: Write test `TestUpdateLocal_JiraDependencies_WikiFormat` - formats as wiki links
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Add jira-dependencies case to updateLocal
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.11: Implement parseJiraDepsFromJira Function
+
+**Goal**: Convert comma-separated task IDs to wiki link format
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestParseJiraDepsFromJira_Empty` - returns empty array
+2. [ ] **TEST (RED)**: Write test `TestParseJiraDepsFromJira_SingleDep` - returns wiki link
+3. [ ] **TEST (RED)**: Write test `TestParseJiraDepsFromJira_MultipleDeps` - returns multiple wiki links
+4. [ ] **TEST (RED)**: Write test `TestParseJiraDepsFromJira_UnknownTaskID` - skips unknown IDs
+5. [ ] **RUN**: Confirm tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Implement parseJiraDepsFromJira function
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 13.12: Update fullsync Command to Pass allTasks
+
+**Goal**: Wire up the full-sync command to pass allTasks to FullSyncer
+
+**TDD Steps**:
+1. [ ] **IMPLEMENT**: Update runFullSync to pass `tasks` (all parsed tasks) to NewFullSyncer
+2. [ ] **VALIDATE**: Run `jira-sync full-sync --dry-run` and verify jira-dependencies appear in output
+3. [ ] **INTEGRATION TEST**: Create two linked tasks, modify links, verify sync works
+
+**Files**: `cmd/fullsync.go`
+
+---
+
+#### Task 13.13: Integration Testing
+
+**Goal**: End-to-end verification of jira-dependencies sync
+
+**Manual Test Cases**:
+1. [ ] Local adds dependency → Jira link created
+2. [ ] Local removes dependency → Jira link deleted
+3. [ ] Jira adds link → Local file updated with wiki link format
+4. [ ] Jira removes link → Local file updated
+5. [ ] Conflict (both changed) → Prompts user correctly
+6. [ ] `--direction local` → Local wins for dependencies
+7. [ ] `--direction jira` → Jira wins for dependencies
+
+---
+
+### Implementation Order
+
+Execute tasks in this order to maintain TDD discipline:
+
+```
+13.5 (stringSlicesEqual) → 13.7 (difference)
+                                    ↓
+13.1 (allTasks field) → 13.3 (jiraKeyToTaskID) → 13.4 (taskIDToJiraKey)
+                                    ↓
+13.2 (extractBlockingLinks) → 13.6 (compareFields jira-deps)
+                                    ↓
+13.9 (removeBlocksLink) → 13.8 (updateJiraDependencies)
+                                    ↓
+13.11 (parseJiraDepsFromJira) → 13.10 (updateLocal jira-deps)
+                                    ↓
+                    13.12 (wire up command) → 13.13 (integration)
+```
+
+### Acceptance Criteria
+
+- [ ] `jira-sync full-sync --dry-run` shows jira-dependencies changes
+- [ ] Adding a local jira-dependency creates "blocks" link in Jira
+- [ ] Removing a local jira-dependency removes "blocks" link from Jira
+- [ ] Adding a Jira "blocks" link updates local jira-dependencies array
+- [ ] Removing a Jira "blocks" link updates local jira-dependencies array
+- [ ] Conflicts are detected when both local and Jira dependencies changed
+- [ ] `--direction local` resolves dependency conflicts with local values
+- [ ] `--direction jira` resolves dependency conflicts with Jira values
+- [ ] All new code has unit tests with >80% coverage
+- [ ] `go test ./...` passes
+- [ ] `golangci-lint run` passes
+
+---
+
 ## Next Steps
 
 1. Create Go project structure in `jira/jira-sync/`
@@ -2725,6 +3230,7 @@ This becomes the Jira ticket description field.
 **`jira-dependencies`** - Creates Jira "blocks" links
 - Creates "X blocks Y" links in Jira after tickets are created
 - Does NOT affect creation order
+- **Synced bidirectionally**: Changes to local array or Jira links are synced via `full-sync`
 
 Most tasks will have the same values for both fields. Use `--deps` shorthand to set both.
 

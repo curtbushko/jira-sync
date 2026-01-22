@@ -183,3 +183,199 @@ func TestDetectChanges_StatusChanged(t *testing.T) {
 	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
 	assert.Contains(t, result.Fields, "status")
 }
+
+// Tests for jira-dependencies detection
+
+func TestDetectDependencyChanges_InSync(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with dependencies on KB-2 and KB-3
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"KB-2", "KB-3"},
+		},
+	}
+
+	// All tasks for mapping
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-102"}},
+	}
+
+	// Jira links match local dependencies
+	jiraLinks := []ports.IssueLink{
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.False(t, result.HasChanges)
+	assert.Empty(t, result.ToAdd)
+	assert.Empty(t, result.ToRemove)
+}
+
+func TestDetectDependencyChanges_LocalAdded(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with dependencies on KB-2 and KB-3 (KB-3 is new)
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"KB-2", "KB-3"},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-102"}},
+	}
+
+	// Jira only has KB-2 link
+	jiraLinks := []ports.IssueLink{
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.True(t, result.HasChanges)
+	assert.Equal(t, []string{"GUARD-102"}, result.ToAdd)
+	assert.Empty(t, result.ToRemove)
+}
+
+func TestDetectDependencyChanges_LocalRemoved(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with only KB-2 dependency (KB-3 was removed locally)
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"KB-2"},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-102"}},
+	}
+
+	// Jira has both KB-2 and KB-3 links
+	jiraLinks := []ports.IssueLink{
+		{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{ID: "link-2", Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.True(t, result.HasChanges)
+	assert.Empty(t, result.ToAdd)
+	assert.Equal(t, []string{"link-2"}, result.ToRemove) // Link ID to remove
+}
+
+func TestDetectDependencyChanges_BothAddAndRemove(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task: KB-2 removed, KB-4 added
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"KB-3", "KB-4"}, // KB-2 removed, KB-4 added
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-102"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-4: Task 4", JiraNumber: "GUARD-103"}},
+	}
+
+	// Jira has KB-2 and KB-3
+	jiraLinks := []ports.IssueLink{
+		{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{ID: "link-2", Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.True(t, result.HasChanges)
+	assert.Equal(t, []string{"GUARD-103"}, result.ToAdd)
+	assert.Equal(t, []string{"link-1"}, result.ToRemove)
+}
+
+func TestDetectDependencyChanges_IgnoresOtherLinkTypes(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"KB-2"},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-102"}},
+	}
+
+	// Jira has a "Blocks" link and a "Relates" link (should ignore "Relates")
+	jiraLinks := []ports.IssueLink{
+		{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{ID: "link-2", Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	// Should be in sync (Relates link is ignored)
+	assert.False(t, result.HasChanges)
+}
+
+func TestDetectDependencyChanges_EmptyDependencies(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{}
+
+	jiraLinks := []ports.IssueLink{}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.False(t, result.HasChanges)
+}
+
+func TestDetectDependencyChanges_WikiLinkFormat(t *testing.T) {
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with wiki link format dependencies
+	task := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			JiraNumber:       "GUARD-123",
+			JiraDependencies: []string{"[KB-2: Task 2](20260116-103001.md)"},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
+	}
+
+	jiraLinks := []ports.IssueLink{
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+	}
+
+	detector := NewChangeDetector(hasher)
+	result := detector.DetectDependencyChanges(task, jiraLinks, allTasks)
+
+	assert.False(t, result.HasChanges)
+}

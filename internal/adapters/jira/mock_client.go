@@ -17,6 +17,8 @@ type MockJiraClient struct {
 	CreateIssueFunc    func(ctx context.Context, req ports.CreateIssueRequest) (*ports.Issue, error)
 	UpdateIssueFunc    func(ctx context.Context, key string, req ports.UpdateIssueRequest) error
 	CreateLinkFunc     func(ctx context.Context, inward, outward, linkType string) error
+	GetIssueLinksFunc  func(ctx context.Context, key string) ([]ports.IssueLink, error)
+	DeleteLinkFunc     func(ctx context.Context, linkID string) error
 	GetIssueFunc       func(ctx context.Context, key string) (*ports.Issue, error)
 	GetTransitionsFunc func(ctx context.Context, key string) ([]ports.Transition, error)
 	DoTransitionFunc   func(ctx context.Context, key, transitionID string) error
@@ -25,12 +27,18 @@ type MockJiraClient struct {
 	CreateIssueCalls    []ports.CreateIssueRequest
 	UpdateIssueCalls    []UpdateIssueCall
 	CreateLinkCalls     []CreateLinkCall
+	GetIssueLinksCalls  []string
+	DeleteLinkCalls     []string
 	GetIssueCalls       []string
 	GetTransitionsCalls []string
 	DoTransitionCalls   []DoTransitionCall
 
+	// Stored links for testing (key -> links)
+	StoredLinks map[string][]ports.IssueLink
+
 	// Auto-increment for issue keys
 	issueCounter int
+	linkCounter  int
 	baseURL      string
 }
 
@@ -167,6 +175,57 @@ func (m *MockJiraClient) DoTransition(ctx context.Context, key, transitionID str
 	return nil
 }
 
+// GetIssueLinks returns all links for an issue.
+func (m *MockJiraClient) GetIssueLinks(ctx context.Context, key string) ([]ports.IssueLink, error) {
+	m.mu.Lock()
+	m.GetIssueLinksCalls = append(m.GetIssueLinksCalls, key)
+	m.mu.Unlock()
+
+	if m.GetIssueLinksFunc != nil {
+		return m.GetIssueLinksFunc(ctx, key)
+	}
+
+	// Return stored links if available
+	if m.StoredLinks != nil {
+		if links, ok := m.StoredLinks[key]; ok {
+			return links, nil
+		}
+	}
+
+	return []ports.IssueLink{}, nil
+}
+
+// DeleteLink removes an issue link by ID.
+func (m *MockJiraClient) DeleteLink(ctx context.Context, linkID string) error {
+	m.mu.Lock()
+	m.DeleteLinkCalls = append(m.DeleteLinkCalls, linkID)
+	m.mu.Unlock()
+
+	if m.DeleteLinkFunc != nil {
+		return m.DeleteLinkFunc(ctx, linkID)
+	}
+
+	return nil
+}
+
+// AddStoredLink adds a link to the mock storage for testing.
+func (m *MockJiraClient) AddStoredLink(issueKey string, link ports.IssueLink) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.StoredLinks == nil {
+		m.StoredLinks = make(map[string][]ports.IssueLink)
+	}
+
+	// Auto-generate link ID if not set
+	if link.ID == "" {
+		m.linkCounter++
+		link.ID = fmt.Sprintf("link-%d", m.linkCounter)
+	}
+
+	m.StoredLinks[issueKey] = append(m.StoredLinks[issueKey], link)
+}
+
 // SetBaseURL sets the base URL for the mock client.
 func (m *MockJiraClient) SetBaseURL(url string) {
 	m.baseURL = url
@@ -179,8 +238,12 @@ func (m *MockJiraClient) Reset() {
 	m.CreateIssueCalls = nil
 	m.UpdateIssueCalls = nil
 	m.CreateLinkCalls = nil
+	m.GetIssueLinksCalls = nil
+	m.DeleteLinkCalls = nil
 	m.GetIssueCalls = nil
 	m.GetTransitionsCalls = nil
 	m.DoTransitionCalls = nil
+	m.StoredLinks = nil
 	m.issueCounter = 0
+	m.linkCounter = 0
 }

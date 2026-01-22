@@ -54,6 +54,14 @@ type Transition struct {
 	Name string // Human-readable transition name (e.g., "In Progress", "Done")
 }
 
+// IssueLink represents a link between two Jira issues.
+type IssueLink struct {
+	ID           string // Link ID (used for deletion)
+	Type         string // Link type name (e.g., "Blocks")
+	InwardIssue  string // Inward issue key (e.g., blocked issue)
+	OutwardIssue string // Outward issue key (e.g., blocker)
+}
+
 // JiraClient handles all Jira API operations.
 type JiraClient interface {
 	// CreateIssue creates a new issue and returns the created issue with key.
@@ -65,6 +73,12 @@ type JiraClient interface {
 	// CreateLink creates a dependency link between two issues.
 	// inward is the blocked issue, outward is the blocker.
 	CreateLink(ctx context.Context, inward, outward, linkType string) error
+
+	// GetIssueLinks returns all links for an issue.
+	GetIssueLinks(ctx context.Context, key string) ([]IssueLink, error)
+
+	// DeleteLink removes an issue link by ID.
+	DeleteLink(ctx context.Context, linkID string) error
 
 	// GetIssue fetches an issue by key.
 	GetIssue(ctx context.Context, key string) (*Issue, error)

@@ -213,3 +213,237 @@ func TestFullSyncService_SyncAllTasks(t *testing.T) {
 	assert.Equal(t, ChangeTypeLocalToJira, results[0].Type)
 	assert.Equal(t, ChangeTypeNone, results[1].Type)
 }
+
+// Tests for jira-dependencies syncing
+
+func TestFullSyncService_SyncDependencies_AddLink(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with a new dependency on KB-2
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraParent:       "GUARD-100",
+			JiraDependencies: []string{"KB-2"}, // New dependency
+			LastSynced:       "2026-01-15T10:00:00Z",
+		},
+		Description: "Description",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+
+	// All tasks for mapping
+	allTasks := []*domain.TaskFile{
+		task,
+		{
+			Path: "/tasks/task2.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-2: Task 2",
+				JiraNumber: "GUARD-102",
+			},
+		},
+	}
+
+	// Mock GetIssue to return no changes in content
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:         "GUARD-101",
+			Summary:     "KB-1: Task 1",
+			Description: "Description",
+			Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
+		}, nil
+	}
+
+	// Mock GetIssueLinks to return empty (no existing links)
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result, err := svc.SyncTask(context.Background(), task)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result.DependencyResult)
+	assert.True(t, result.DependencyResult.HasChanges)
+	assert.Equal(t, []string{"GUARD-102"}, result.DependencyResult.ToAdd)
+
+	// Should have created a link
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
+	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Outward)
+	assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
+}
+
+func TestFullSyncService_SyncDependencies_RemoveLink(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with no dependencies (dependency was removed locally)
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraParent:       "GUARD-100",
+			JiraDependencies: []string{}, // No dependencies
+			LastSynced:       "2026-01-15T10:00:00Z",
+		},
+		Description: "Description",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+
+	allTasks := []*domain.TaskFile{
+		task,
+		{
+			Path: "/tasks/task2.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-2: Task 2",
+				JiraNumber: "GUARD-102",
+			},
+		},
+	}
+
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:         "GUARD-101",
+			Summary:     "KB-1: Task 1",
+			Description: "Description",
+			Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
+		}, nil
+	}
+
+	// Mock GetIssueLinks to return existing link to KB-2
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{
+			{
+				ID:           "link-123",
+				Type:         "Blocks",
+				InwardIssue:  "GUARD-102",
+				OutwardIssue: "GUARD-101",
+			},
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result, err := svc.SyncTask(context.Background(), task)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result.DependencyResult)
+	assert.True(t, result.DependencyResult.HasChanges)
+	assert.Equal(t, []string{"link-123"}, result.DependencyResult.ToRemove)
+
+	// Should have deleted the link
+	assert.Len(t, mockJira.DeleteLinkCalls, 1)
+	assert.Equal(t, "link-123", mockJira.DeleteLinkCalls[0])
+}
+
+func TestFullSyncService_SyncDependencies_NoChanges(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with dependency on KB-2
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraParent:       "GUARD-100",
+			JiraDependencies: []string{"KB-2"},
+			LastSynced:       "2026-01-15T10:00:00Z",
+		},
+		Description: "Description",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+
+	allTasks := []*domain.TaskFile{
+		task,
+		{
+			Path: "/tasks/task2.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-2: Task 2",
+				JiraNumber: "GUARD-102",
+			},
+		},
+	}
+
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:         "GUARD-101",
+			Summary:     "KB-1: Task 1",
+			Description: "Description",
+			Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
+		}, nil
+	}
+
+	// Jira already has the link
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{
+			{
+				ID:           "link-123",
+				Type:         "Blocks",
+				InwardIssue:  "GUARD-102",
+				OutwardIssue: "GUARD-101",
+			},
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result, err := svc.SyncTask(context.Background(), task)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result.DependencyResult)
+	assert.False(t, result.DependencyResult.HasChanges)
+
+	// Should not have created or deleted any links
+	assert.Len(t, mockJira.CreateLinkCalls, 0)
+	assert.Len(t, mockJira.DeleteLinkCalls, 0)
+}
+
+func TestFullSyncService_SyncDependenciesOnly(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraDependencies: []string{"KB-2", "KB-3"},
+		},
+	}
+
+	allTasks := []*domain.TaskFile{
+		task,
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-102"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-103"}},
+	}
+
+	// Only KB-2 link exists
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{
+			{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-101"},
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result, err := svc.SyncDependenciesOnly(context.Background(), task)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.HasChanges)
+	assert.Equal(t, []string{"GUARD-103"}, result.ToAdd)
+
+	// Should have created a link for KB-3
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	assert.Equal(t, "GUARD-103", mockJira.CreateLinkCalls[0].Outward)
+}

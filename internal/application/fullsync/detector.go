@@ -136,3 +136,99 @@ func (d *ChangeDetector) parseLastSynced(lastSynced string) time.Time {
 	}
 	return parsed
 }
+
+// DependencyChangeResult holds the result of comparing jira-dependencies.
+type DependencyChangeResult struct {
+	HasChanges bool
+	ToAdd      []string // Jira issue keys to create "Blocks" links for
+	ToRemove   []string // Link IDs to delete
+	LocalDeps  []string // Local dependency task IDs (for reporting)
+	JiraDeps   []string // Jira dependency task IDs (for reporting)
+}
+
+// DetectDependencyChanges compares local jira-dependencies with Jira issue links.
+// Returns which links need to be added or removed to sync.
+func (d *ChangeDetector) DetectDependencyChanges(
+	task *domain.TaskFile,
+	jiraLinks []ports.IssueLink,
+	allTasks []*domain.TaskFile,
+) DependencyChangeResult {
+	// Build mapping from task ID to Jira key and vice versa
+	taskIDToJiraKey := make(map[string]string)
+	jiraKeyToTaskID := make(map[string]string)
+	for _, t := range allTasks {
+		taskID := t.TaskID()
+		if taskID != "" && t.Frontmatter.JiraNumber != "" {
+			taskIDToJiraKey[taskID] = t.Frontmatter.JiraNumber
+			jiraKeyToTaskID[t.Frontmatter.JiraNumber] = taskID
+		}
+	}
+
+	// Get local dependency task IDs
+	localDepIDs := task.GetJiraDependencyIDs()
+
+	// Convert local deps to Jira keys
+	var localJiraKeys []string
+	for _, depID := range localDepIDs {
+		if jiraKey, ok := taskIDToJiraKey[depID]; ok {
+			localJiraKeys = append(localJiraKeys, jiraKey)
+		}
+	}
+
+	// Extract Jira "Blocks" links where this task is blocked (outward)
+	// A "Blocks" link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123
+	var jiraBlockerKeys []string
+	linkIDByBlocker := make(map[string]string) // Jira key -> link ID
+
+	for _, link := range jiraLinks {
+		// Only consider "Blocks" type links where this task is the blocked (outward) issue
+		if link.Type == LinkTypeBlocks && link.OutwardIssue == task.Frontmatter.JiraNumber && link.InwardIssue != "" {
+			jiraBlockerKeys = append(jiraBlockerKeys, link.InwardIssue)
+			linkIDByBlocker[link.InwardIssue] = link.ID
+		}
+	}
+
+	// Compare local vs Jira
+	if stringSlicesEqual(localJiraKeys, jiraBlockerKeys) {
+		// Convert Jira keys back to task IDs for reporting
+		var jiraDepTaskIDs []string
+		for _, key := range jiraBlockerKeys {
+			if taskID, ok := jiraKeyToTaskID[key]; ok {
+				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
+			}
+		}
+		return DependencyChangeResult{
+			HasChanges: false,
+			LocalDeps:  localDepIDs,
+			JiraDeps:   jiraDepTaskIDs,
+		}
+	}
+
+	// Calculate what needs to be added/removed
+	toAddKeys := difference(localJiraKeys, jiraBlockerKeys)
+	toRemoveKeys := difference(jiraBlockerKeys, localJiraKeys)
+
+	// Convert toRemove keys to link IDs
+	var toRemoveLinkIDs []string
+	for _, key := range toRemoveKeys {
+		if linkID, ok := linkIDByBlocker[key]; ok {
+			toRemoveLinkIDs = append(toRemoveLinkIDs, linkID)
+		}
+	}
+
+	// Convert Jira keys back to task IDs for reporting
+	var jiraDepTaskIDs []string
+	for _, key := range jiraBlockerKeys {
+		if taskID, ok := jiraKeyToTaskID[key]; ok {
+			jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
+		}
+	}
+
+	return DependencyChangeResult{
+		HasChanges: true,
+		ToAdd:      toAddKeys,
+		ToRemove:   toRemoveLinkIDs,
+		LocalDeps:  localDepIDs,
+		JiraDeps:   jiraDepTaskIDs,
+	}
+}

@@ -203,3 +203,57 @@ func (c *Client) DoTransition(ctx context.Context, key, transitionID string) err
 
 	return nil
 }
+
+// GetIssueLinks returns all links for an issue.
+func (c *Client) GetIssueLinks(ctx context.Context, key string) ([]ports.IssueLink, error) {
+	// Fetch issue with expanded links
+	opts := &jira.GetQueryOptions{
+		Expand: "issuelinks",
+	}
+	issue, resp, err := c.client.Issue.GetWithContext(ctx, key, opts)
+	if err != nil {
+		if resp != nil {
+			body := readResponseBody(resp)
+			return nil, fmt.Errorf("get issue links for %s (status: %d): %s: %w", key, resp.StatusCode, body, err)
+		}
+		return nil, fmt.Errorf("get issue links for %s: %w", key, err)
+	}
+
+	if issue.Fields == nil || issue.Fields.IssueLinks == nil {
+		return []ports.IssueLink{}, nil
+	}
+
+	var links []ports.IssueLink
+	for _, link := range issue.Fields.IssueLinks {
+		issueLink := ports.IssueLink{
+			ID:   link.ID,
+			Type: link.Type.Name,
+		}
+
+		// Set inward/outward issue keys
+		if link.InwardIssue != nil {
+			issueLink.InwardIssue = link.InwardIssue.Key
+		}
+		if link.OutwardIssue != nil {
+			issueLink.OutwardIssue = link.OutwardIssue.Key
+		}
+
+		links = append(links, issueLink)
+	}
+
+	return links, nil
+}
+
+// DeleteLink removes an issue link by ID.
+func (c *Client) DeleteLink(ctx context.Context, linkID string) error {
+	resp, err := c.client.Issue.DeleteLinkWithContext(ctx, linkID)
+	if err != nil {
+		if resp != nil {
+			body := readResponseBody(resp)
+			return fmt.Errorf("delete link %s (status: %d): %s: %w", linkID, resp.StatusCode, body, err)
+		}
+		return fmt.Errorf("delete link %s: %w", linkID, err)
+	}
+
+	return nil
+}
