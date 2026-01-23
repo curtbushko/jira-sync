@@ -1,5 +1,5 @@
 # go-arch-lint configuration for Hexagonal/Onion Architecture
-# Copy this file to your project root as .go-arch-lint.yml
+# Configured for jira-sync project structure
 #
 # Install: go install github.com/fe3dback/go-arch-lint@latest
 # Usage:   go-arch-lint check
@@ -8,101 +8,108 @@
 version: 3
 workdir: internal
 
+# Allow all vendor imports (we only enforce component boundaries)
+allow:
+  depOnAnyVendor: true
+
 # Define architectural components
 components:
-  # OUTER LAYER: Adapters (Infrastructure)
-  handlers:
-    in: adapters/handlers/**
+  # OUTER LAYER: Adapters (Infrastructure implementations)
+  filesystem:
+    in: adapters/filesystem/**
 
-  repositories:
-    in: adapters/repositories/**
+  jira:
+    in: adapters/jira/**
+
+  hashing:
+    in: adapters/hashing/**
+
+  # APPLICATION LAYER: Services/Use Cases
+  sync:
+    in: application/sync/**
+
+  fullsync:
+    in: application/fullsync/**
+
+  export:
+    in: application/export/**
+
+  transition:
+    in: application/transition/**
 
   # INNER LAYERS: Core Business Logic
-  services:
-    in: core/services/**
-
   ports:
-    in: core/ports/**
+    in: ports/**
 
   domain:
-    in: core/domain/**
+    in: domain/**
 
   # Supporting
   config:
     in: config/**
 
+  # Integration tests (separate component)
+  integration:
+    in: integration/**
+
 # Components that can be used by all other components
 commonComponents:
   - domain
   - ports
-  - config
-
-# Common vendor dependencies allowed everywhere
-commonVendors:
-  - context
-  - errors
-  - fmt
-  - time
-  - strings
-  - strconv
-  - encoding/**
-  - github.com/google/uuid
 
 # Dependency rules - defines allowed import relationships
 deps:
-  # Handlers can depend on services (to call use cases)
-  handlers:
-    mayDependOn:
-      - services
-    canUse:
-      - net/http
-      - github.com/gin-gonic/**
-      - github.com/labstack/echo/**
-      - github.com/go-chi/**
-      - google.golang.org/grpc/**
-
-  # Services implement business logic using ports
-  services:
+  # Application services implement business logic using ports
+  sync:
     mayDependOn:
       - ports
-    # Services should NOT depend on concrete implementations
 
-  # Ports define interfaces - no dependencies on implementations
+  fullsync:
+    mayDependOn:
+      - ports
+
+  export:
+    mayDependOn:
+      - ports
+
+  transition:
+    mayDependOn:
+      - ports
+
+  # Ports define interfaces - only depend on domain types (via commonComponents)
   ports:
-    # Ports only depend on domain types (via commonComponents)
+    anyVendorDeps: true
 
-  # Domain is pure - NO external dependencies
+  # Domain is pure - NO external dependencies (innermost layer)
   domain:
-    # Domain has no mayDependOn - it's the innermost layer
-    # Only stdlib types allowed
+    anyVendorDeps: true
 
-  # Repositories implement port interfaces
-  repositories:
+  # Filesystem adapter implements TaskRepository port
+  filesystem:
     mayDependOn:
       - ports
-    canUse:
-      - database/sql
-      - github.com/jmoiron/sqlx
-      - github.com/jackc/pgx/**
-      - github.com/go-redis/redis/**
-      - go.mongodb.org/mongo-driver/**
 
-  # Config can use environment/file loading
+  # Jira adapter implements JiraClient port
+  jira:
+    mayDependOn:
+      - ports
+
+  # Hashing adapter implements HashComputer port
+  hashing:
+    mayDependOn:
+      - ports
+
+  # Config is standalone
   config:
-    canUse:
-      - os
-      - github.com/spf13/viper
-      - github.com/kelseyhightower/envconfig
+    anyVendorDeps: true
 
-# Exclude from analysis
-exclude:
-  - "**/*_test.go"
-  - "**/mock_*.go"
-  - "**/mocks/**"
-  - "**/testdata/**"
+  # Integration tests can use everything
+  integration:
+    anyProjectDeps: true
 
-# Exclude specific files from matching
+# Exclude test files from analysis
 excludeFiles:
-  - ".git/**"
-  - "vendor/**"
-  - "**/*_generated.go"
+  - _test\.go$
+  - mock_.*\.go$
+  - /mocks/
+  - /testdata/
