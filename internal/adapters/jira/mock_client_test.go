@@ -138,3 +138,79 @@ func TestMockJiraClient_AutoIncrementKeys(t *testing.T) {
 	assert.Equal(t, "TEST-2", issue2.Key)
 	assert.Equal(t, "OTHER-3", issue3.Key)
 }
+
+func TestMockJiraClient_GetIssueWithLinks_DefaultBehavior(t *testing.T) {
+	mock := NewMockJiraClient()
+
+	issue, err := mock.GetIssueWithLinks(context.Background(), "TEST-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "TEST-1", issue.Key)
+	assert.Equal(t, "https://mock.atlassian.net/browse/TEST-1", issue.URL)
+	assert.Equal(t, "MOCK", issue.Project)
+	assert.Equal(t, "Mock Issue", issue.Summary)
+	assert.Equal(t, "2026-01-15T14:30:45.000+0000", issue.Created)
+	assert.Len(t, mock.GetIssueWithLinksCalls, 1)
+}
+
+func TestMockJiraClient_GetIssueWithLinks_CustomBehavior(t *testing.T) {
+	mock := NewMockJiraClient()
+	mock.GetIssueWithLinksFunc = func(_ context.Context, key string) (*ports.IssueWithLinks, error) {
+		return &ports.IssueWithLinks{
+			Key:         key,
+			URL:         "https://custom.url/browse/" + key,
+			Project:     "CUSTOM",
+			Summary:     "Custom Summary",
+			Description: "Custom Description",
+			Status:      "In Progress",
+			Parent:      "CUSTOM-100",
+			Created:     "2026-01-20T10:00:00.000+0000",
+			Links: []ports.IssueLink{
+				{ID: "link-1", Type: "Blocks", InwardIssue: "CUSTOM-50"},
+			},
+		}, nil
+	}
+
+	issue, err := mock.GetIssueWithLinks(context.Background(), "CUSTOM-123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "CUSTOM-123", issue.Key)
+	assert.Equal(t, "CUSTOM", issue.Project)
+	assert.Equal(t, "CUSTOM-100", issue.Parent)
+	assert.Len(t, issue.Links, 1)
+	assert.Equal(t, "Blocks", issue.Links[0].Type)
+}
+
+func TestMockJiraClient_GetIssueWithLinks_StoredIssue(t *testing.T) {
+	mock := NewMockJiraClient()
+	mock.AddStoredIssue(&ports.IssueWithLinks{
+		Key:         "STORED-1",
+		URL:         "https://stored.url/browse/STORED-1",
+		Project:     "STORED",
+		Summary:     "Stored Issue",
+		Description: "Stored Description",
+		Status:      "Done",
+		Parent:      "STORED-100",
+		Created:     "2026-01-10T08:00:00.000+0000",
+	})
+
+	issue, err := mock.GetIssueWithLinks(context.Background(), "STORED-1")
+
+	require.NoError(t, err)
+	assert.Equal(t, "STORED-1", issue.Key)
+	assert.Equal(t, "STORED", issue.Project)
+	assert.Equal(t, "Stored Issue", issue.Summary)
+	assert.Equal(t, "STORED-100", issue.Parent)
+}
+
+func TestMockJiraClient_GetIssueWithLinks_Error(t *testing.T) {
+	mock := NewMockJiraClient()
+	mock.GetIssueWithLinksFunc = func(_ context.Context, _ string) (*ports.IssueWithLinks, error) {
+		return nil, errors.New("issue not found")
+	}
+
+	_, err := mock.GetIssueWithLinks(context.Background(), "NOTFOUND-1")
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "issue not found")
+}

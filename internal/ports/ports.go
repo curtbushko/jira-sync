@@ -33,6 +33,22 @@ type Issue struct {
 	Updated     time.Time // Last updated timestamp from Jira
 }
 
+// IssueWithLinks represents a Jira issue with expanded link information.
+// Used by the export command to fetch all issue details in one request.
+type IssueWithLinks struct {
+	Key         string
+	URL         string // Full URL to the issue (e.g., https://jira.example.com/browse/PROJ-123)
+	Project     string // Project key (e.g., "PROJ")
+	Summary     string
+	Description string
+	Status      string
+	Parent      string      // Parent issue key (e.g., "PROJ-100"), empty if no parent
+	Created     string      // Issue creation datetime in Jira format
+	StartDate   string      // Start date field (may be empty)
+	EndDate     string      // End date field (may be empty)
+	Links       []IssueLink // Issue links
+}
+
 // CreateIssueRequest contains the data needed to create a Jira issue.
 type CreateIssueRequest struct {
 	Project     string
@@ -82,6 +98,10 @@ type JiraClient interface {
 
 	// GetIssue fetches an issue by key.
 	GetIssue(ctx context.Context, key string) (*Issue, error)
+
+	// GetIssueWithLinks fetches an issue with expanded links for export.
+	// Returns all fields needed to create a local task file.
+	GetIssueWithLinks(ctx context.Context, key string) (*IssueWithLinks, error)
 
 	// GetTransitions returns available transitions for an issue.
 	GetTransitions(ctx context.Context, key string) ([]Transition, error)

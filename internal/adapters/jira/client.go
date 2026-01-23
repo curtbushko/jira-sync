@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/curtbushko/jira-sync/internal/domain"
@@ -256,4 +257,68 @@ func (c *Client) DeleteLink(ctx context.Context, linkID string) error {
 	}
 
 	return nil
+}
+
+// GetIssueWithLinks fetches an issue with expanded links for export.
+func (c *Client) GetIssueWithLinks(ctx context.Context, key string) (*ports.IssueWithLinks, error) {
+	// Fetch issue with expanded links and parent
+	opts := &jira.GetQueryOptions{
+		Expand: "issuelinks",
+	}
+	issue, resp, err := c.client.Issue.GetWithContext(ctx, key, opts)
+	if err != nil {
+		if resp != nil {
+			body := readResponseBody(resp)
+			return nil, fmt.Errorf("get issue %s (status: %d): %s: %w", key, resp.StatusCode, body, err)
+		}
+		return nil, fmt.Errorf("get issue %s: %w", key, err)
+	}
+
+	result := &ports.IssueWithLinks{
+		Key: issue.Key,
+		URL: fmt.Sprintf("%s/browse/%s", c.baseURL, issue.Key),
+	}
+
+	if issue.Fields != nil {
+		result.Summary = issue.Fields.Summary
+		result.Description = issue.Fields.Description
+
+		if issue.Fields.Status != nil {
+			result.Status = issue.Fields.Status.Name
+		}
+
+		if issue.Fields.Project.Key != "" {
+			result.Project = issue.Fields.Project.Key
+		}
+
+		if issue.Fields.Parent != nil {
+			result.Parent = issue.Fields.Parent.Key
+		}
+
+		// Extract creation date from the Created field
+		// jira.Time is a wrapper around time.Time, format it back to Jira string format
+		createdTime := time.Time(issue.Fields.Created)
+		if !createdTime.IsZero() {
+			result.Created = createdTime.Format("2006-01-02T15:04:05.000-0700")
+		}
+
+		// Extract issue links
+		if issue.Fields.IssueLinks != nil {
+			for _, link := range issue.Fields.IssueLinks {
+				issueLink := ports.IssueLink{
+					ID:   link.ID,
+					Type: link.Type.Name,
+				}
+				if link.InwardIssue != nil {
+					issueLink.InwardIssue = link.InwardIssue.Key
+				}
+				if link.OutwardIssue != nil {
+					issueLink.OutwardIssue = link.OutwardIssue.Key
+				}
+				result.Links = append(result.Links, issueLink)
+			}
+		}
+	}
+
+	return result, nil
 }
