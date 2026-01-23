@@ -5228,6 +5228,701 @@ func TestTransitionIssue_AlreadyInState(t *testing.T) {
 
 ---
 
+## 5. Export Command (Import from Jira)
+
+The `export` command fetches an existing Jira issue and creates a local task file from it. This is useful for:
+- Importing existing Jira tickets into the local task management system
+- Starting to track tickets that were created directly in Jira
+- Onboarding existing projects into jira-sync workflow
+
+### Command Syntax
+
+```bash
+jira-sync export <jira-id> [flags]
+```
+
+**Arguments:**
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `jira-id` | Yes | Jira issue key (e.g., "GUARD-123", "CRE-456") |
+
+**Flags:**
+
+| Flag | Short | Required | Description |
+|------|-------|----------|-------------|
+| `--output` | `-o` | No | Output directory for task file (default: current directory) |
+| `--parent` | `-p` | No | Override jira-parent value (uses Jira parent if not specified) |
+| `--force` | `-f` | No | Overwrite existing file if it exists |
+
+**Examples:**
+
+```bash
+# Export a single issue to current directory
+jira-sync export GUARD-123
+
+# Export to specific directory
+jira-sync export CRE-456 --output ./tasks/
+
+# Export with custom parent
+jira-sync export GUARD-123 --parent GUARD-100
+
+# Overwrite existing file
+jira-sync export GUARD-123 --force
+```
+
+### Filename Generation
+
+The filename follows the zettelkasten format but uses the **Jira issue creation date** instead of current time:
+
+```
+YYYYMMDD-HHMMSS.md
+```
+
+**Example:**
+- Jira issue created: `2026-01-15T14:30:45.000+0000`
+- Generated filename: `20260115-143045.md`
+
+This ensures:
+1. Files are chronologically sorted by when work was originally created
+2. Re-exporting the same issue produces the same filename
+3. Easy to identify when tasks were originally planned
+
+### Field Mapping
+
+The export command maps Jira fields to frontmatter fields:
+
+| Jira Field | Frontmatter Field | Notes |
+|------------|-------------------|-------|
+| `key` | `jira-number` | e.g., "GUARD-123" |
+| `fields.summary` | `title` | Issue summary becomes title |
+| `fields.project.key` | `jira-project` | Project key extracted from issue |
+| `fields.status.name` | `jira-state` | Current status |
+| `fields.created` | `created-date` | Issue creation date (date only) |
+| `fields.customfield_*` | `start-date` | Start date custom field (if configured) |
+| `fields.customfield_*` | `end-date` | End date custom field (if configured) |
+| `self` or constructed | `jira-url` | Full URL to the issue |
+| (always) | `sync-status` | Set to "linked" (already exists in Jira) |
+| `fields.parent.key` | `jira-parent` | Parent epic/story key |
+| (from links) | `jira-dependencies` | Extracted from "blocks" links |
+| (empty) | `sync-dependencies` | Set to empty (can be added manually) |
+| (computed) | `content-hash` | Computed after export |
+| (now) | `last-synced` | Set to current timestamp |
+| `fields.description` | Description (body) | Markdown body content |
+
+### Jira-Dependencies Extraction
+
+The export command extracts blocking relationships from Jira issue links:
+
+1. Fetch all issue links for the exported issue
+2. Filter for "Blocks" link type where this issue is the **outward** issue (blocked by others)
+3. For each blocker, check if it exists in local task files:
+   - If found: use wiki link format `[TASK-ID: Title](filename.md)`
+   - If not found: use plain Jira key format (e.g., "GUARD-101")
+4. Populate `jira-dependencies` array
+
+**Example:**
+```yaml
+# If GUARD-123 is blocked by GUARD-101 and GUARD-102
+# And GUARD-101 exists locally as KB-1 in 20260115-100000.md
+jira-dependencies:
+  - "[KB-1: Initialize Project](20260115-100000.md)"
+  - "GUARD-102"  # Not in local files yet
+```
+
+### Output Format
+
+The exported file follows the standard task file format:
+
+```markdown
+---
+title: "KB-1: Kubebuilder - Initialize Project"
+jira-number: GUARD-123
+jira-project: GUARD
+jira-state: In Progress
+created-date: 2026-01-15
+start-date: 2026-01-15
+end-date: 2026-01-22
+jira-url: https://company.atlassian.net/browse/GUARD-123
+sync-status: linked
+jira-parent: GUARD-100
+sync-dependencies: []
+jira-dependencies:
+  - "[KB-0: Setup](20260114-090000.md)"
+content-hash: "abc123..."
+last-synced: "2026-01-22T10:30:00Z"
+---
+
+Initialize the Kubebuilder project using the CLI tool, create the basic Go module structure, and push to the remote repository.
+
+## Acceptance Criteria
+
+- Kubebuilder project initialized
+- Go module created
+- README.md with basic description
+```
+
+### Error Handling
+
+| Scenario | Behavior |
+|----------|----------|
+| Issue not found | Error: "issue GUARD-123 not found" |
+| No permission | Error: "permission denied for issue GUARD-123" |
+| File already exists | Error: "file already exists: 20260115-143045.md (use --force to overwrite)" |
+| Network error | Error with retry suggestion |
+| Invalid issue key format | Error: "invalid issue key format: must be PROJECT-NUMBER" |
+
+### CLI Output
+
+```
+$ jira-sync export GUARD-123 --output ./tasks/
+
+Fetching GUARD-123...
+✓ Found: KB-1: Kubebuilder - Initialize Project
+  Status: In Progress
+  Created: 2026-01-15
+  Parent: GUARD-100
+
+Extracting dependencies...
+✓ Found 2 blocking issues:
+  - GUARD-101 → [KB-0: Setup](20260114-090000.md)
+  - GUARD-102 → GUARD-102 (not in local files)
+
+✓ Exported: ./tasks/20260115-143045.md
+  Title: KB-1: Kubebuilder - Initialize Project
+  Jira: GUARD-123
+  Dependencies: 2
+```
+
+---
+
+### Phase 13: Export Command Implementation
+
+#### 13.1 Export Service - TDD Implementation
+
+**Test File:** `internal/application/export/service_test.go`
+
+```go
+// Test cases for export service
+
+func TestExportService_FetchAndConvert(t *testing.T) {
+    // RED: Write failing test first
+    // Test that service fetches issue and converts to TaskFile
+}
+
+func TestExportService_FilenameFromCreationDate(t *testing.T) {
+    // RED: Write failing test
+    // Test that filename is generated from Jira creation date
+    // Input: "2026-01-15T14:30:45.000+0000"
+    // Expected: "20260115-143045.md"
+}
+
+func TestExportService_ExtractDependencies(t *testing.T) {
+    // RED: Write failing test
+    // Test that blocking links are extracted correctly
+}
+
+func TestExportService_MapToWikiLinks(t *testing.T) {
+    // RED: Write failing test
+    // Test that Jira keys are mapped to wiki links when possible
+}
+
+func TestExportService_HandleMissingParent(t *testing.T) {
+    // RED: Write failing test
+    // Test behavior when Jira issue has no parent
+}
+
+func TestExportService_ComputeContentHash(t *testing.T) {
+    // RED: Write failing test
+    // Test that content hash is computed for exported file
+}
+```
+
+#### 13.2 Export Command - TDD Implementation
+
+**Test File:** `cmd/export_test.go`
+
+```go
+func TestExportCommand_ValidIssue(t *testing.T) {
+    // RED: Test export with valid issue key
+}
+
+func TestExportCommand_InvalidIssueFormat(t *testing.T) {
+    // RED: Test error handling for invalid key format
+}
+
+func TestExportCommand_FileAlreadyExists(t *testing.T) {
+    // RED: Test error when file exists without --force
+}
+
+func TestExportCommand_ForceOverwrite(t *testing.T) {
+    // RED: Test --force flag overwrites existing file
+}
+
+func TestExportCommand_CustomOutput(t *testing.T) {
+    // RED: Test --output flag changes directory
+}
+
+func TestExportCommand_CustomParent(t *testing.T) {
+    // RED: Test --parent flag overrides Jira parent
+}
+```
+
+#### 13.3 Jira Client Extension - TDD Implementation
+
+**Test File:** `internal/adapters/jira/client_test.go`
+
+```go
+func TestJiraClient_GetIssueWithLinks(t *testing.T) {
+    // RED: Test fetching issue with expanded links
+}
+
+func TestJiraClient_ParseCreationDate(t *testing.T) {
+    // RED: Test parsing Jira datetime format
+}
+```
+
+---
+
+### Phase 13 Implementation TODOs
+
+#### 13.1 Domain Types
+- [ ] Add `ExportOptions` struct to `internal/domain/export.go`
+  - [ ] `ParentOverride string` - override jira-parent value
+  - [ ] `OutputDir string` - output directory path
+  - [ ] `Force bool` - overwrite existing files
+- [ ] Add `ExportResult` struct to `internal/domain/export.go`
+  - [ ] `Task *TaskFile` - the exported task
+  - [ ] `Filename string` - generated filename
+  - [ ] `IsNew bool` - true if file didn't exist
+- [ ] Add `IssueWithLinks` struct to `internal/ports/ports.go`
+  - [ ] All fields from existing `Issue` struct
+  - [ ] `Created string` - issue creation datetime
+  - [ ] `Links []IssueLink` - issue links array
+  - [ ] `URL string` - full URL to issue
+  - [ ] `Project string` - project key
+  - [ ] `Parent string` - parent issue key
+
+#### 13.2 Jira Client Extension
+**GetIssueWithLinks:**
+- [ ] **RED**: Write `TestGetIssueWithLinks_Success` - mock returns full issue with links
+- [ ] **RED**: Write `TestGetIssueWithLinks_NotFound` - returns error for 404
+- [ ] **RED**: Write `TestGetIssueWithLinks_NoLinks` - handles issue with no links
+- [ ] **GREEN**: Add `GetIssueWithLinks(ctx, key) (*IssueWithLinks, error)` to ports interface
+- [ ] **GREEN**: Implement in `internal/adapters/jira/client.go`
+  - [ ] Use `?expand=issuelinks` query parameter
+  - [ ] Extract parent key from response
+  - [ ] Build full URL from base URL + key
+- [ ] **REFACTOR**: Extract link type filtering to helper function
+
+**Datetime Parsing:**
+- [ ] **RED**: Write `TestParseJiraDatetime_StandardFormat` - "2026-01-15T14:30:45.000+0000"
+- [ ] **RED**: Write `TestParseJiraDatetime_UTCFormat` - "2026-01-15T14:30:45.000Z"
+- [ ] **RED**: Write `TestParseJiraDatetime_RFC3339` - standard RFC3339 format
+- [ ] **RED**: Write `TestParseJiraDatetime_Invalid` - returns error for bad format
+- [ ] **GREEN**: Implement `ParseJiraDatetime(string) (time.Time, error)`
+- [ ] **REFACTOR**: Use table-driven tests for datetime formats
+
+#### 13.3 Export Service
+**Create `internal/application/export/service.go`:**
+
+**Basic Export:**
+- [ ] **RED**: Write `TestExport_BasicIssue` - exports issue with all fields mapped
+- [ ] **RED**: Write `TestExport_MissingParent` - handles issue with no parent
+- [ ] **RED**: Write `TestExport_EmptyDescription` - handles empty description
+- [ ] **GREEN**: Implement `NewService(jira, hasher, existingTasks)`
+- [ ] **GREEN**: Implement `Export(ctx, issueKey, opts) (*Result, error)`
+- [ ] **REFACTOR**: Extract field mapping to separate method
+
+**Filename Generation:**
+- [ ] **RED**: Write `TestGenerateFilename_FromCreationDate` - uses issue created date
+- [ ] **RED**: Write `TestGenerateFilename_Timezone` - handles +0000, Z, and offset timezones
+- [ ] **RED**: Write `TestGenerateFilename_Idempotent` - same issue always produces same filename
+- [ ] **GREEN**: Implement filename generation using `createdTime.Format("20060102-150405")`
+- [ ] **REFACTOR**: Handle edge case where time component is missing
+
+**Dependency Extraction:**
+- [ ] **RED**: Write `TestExtractDependencies_BlocksLinks` - extracts inward "Blocks" links
+- [ ] **RED**: Write `TestExtractDependencies_IgnoresOtherLinkTypes` - skips "Relates", etc.
+- [ ] **RED**: Write `TestExtractDependencies_EmptyLinks` - returns empty slice for no links
+- [ ] **RED**: Write `TestExtractDependencies_MultipleBlockers` - handles multiple dependencies
+- [ ] **GREEN**: Implement `extractDependencies(links []IssueLink) []string`
+- [ ] **REFACTOR**: Add sorting for consistent output
+
+**Wiki Link Mapping:**
+- [ ] **RED**: Write `TestMapToWikiLink_FoundLocally` - returns "[Title](filename.md)" format
+- [ ] **RED**: Write `TestMapToWikiLink_NotFoundLocally` - returns plain Jira key
+- [ ] **RED**: Write `TestMapToWikiLink_EmptyExistingTasks` - handles no local tasks
+- [ ] **GREEN**: Implement `mapToWikiLink(jiraKey string) string`
+- [ ] **REFACTOR**: Build lookup map once in constructor for O(1) lookups
+
+**Content Hash:**
+- [ ] **RED**: Write `TestExport_ComputesContentHash` - hash is set after export
+- [ ] **RED**: Write `TestExport_HashMatchesRecomputed` - hash is valid
+- [ ] **GREEN**: Call `hasher.ComputeHash(task)` after building TaskFile
+- [ ] **REFACTOR**: Ensure hash is computed last (after all fields set)
+
+**Last Synced:**
+- [ ] **RED**: Write `TestExport_SetsLastSynced` - timestamp is set to now
+- [ ] **RED**: Write `TestExport_LastSyncedFormat` - uses RFC3339 format
+- [ ] **GREEN**: Set `task.Frontmatter.LastSynced = time.Now().UTC().Format(time.RFC3339)`
+- [ ] **REFACTOR**: Extract timestamp formatting to domain constant
+
+**Sync Status:**
+- [ ] **RED**: Write `TestExport_SetsSyncStatusLinked` - status is "linked"
+- [ ] **GREEN**: Set `task.Frontmatter.SyncStatus = domain.SyncStatusLinked`
+
+#### 13.4 Export Command
+**Create `cmd/export.go`:**
+
+**Basic Command:**
+- [ ] **RED**: Write `TestExportCommand_ValidIssue` - successfully exports issue
+- [ ] **RED**: Write `TestExportCommand_PrintsSuccess` - shows correct output
+- [ ] **GREEN**: Implement cobra command with `Use: "export <jira-id>"`
+- [ ] **GREEN**: Implement `runExport(cmd, args) error`
+- [ ] **REFACTOR**: Extract Jira client creation to shared helper
+
+**Issue Key Validation:**
+- [ ] **RED**: Write `TestExportCommand_InvalidKeyFormat_Lowercase` - rejects "guard-123"
+- [ ] **RED**: Write `TestExportCommand_InvalidKeyFormat_NoNumber` - rejects "GUARD-"
+- [ ] **RED**: Write `TestExportCommand_InvalidKeyFormat_NoProject` - rejects "123"
+- [ ] **RED**: Write `TestExportCommand_ValidKeyFormats` - accepts "GUARD-1", "CRE-999"
+- [ ] **GREEN**: Implement regex validation `^[A-Z]+-\d+$`
+- [ ] **REFACTOR**: Move regex to domain constants
+
+**Output Flag:**
+- [ ] **RED**: Write `TestExportCommand_OutputFlag_Default` - defaults to "."
+- [ ] **RED**: Write `TestExportCommand_OutputFlag_CustomDir` - uses specified directory
+- [ ] **RED**: Write `TestExportCommand_OutputFlag_CreatesDir` - creates directory if missing
+- [ ] **GREEN**: Add `--output, -o` flag with default "."
+- [ ] **GREEN**: Call `os.MkdirAll(outputDir, 0755)`
+- [ ] **REFACTOR**: Validate directory is writable
+
+**Parent Flag:**
+- [ ] **RED**: Write `TestExportCommand_ParentFlag_Override` - uses flag value
+- [ ] **RED**: Write `TestExportCommand_ParentFlag_Empty` - uses Jira parent
+- [ ] **GREEN**: Add `--parent, -p` flag
+- [ ] **GREEN**: Pass to `export.Options{ParentOverride: parentFlag}`
+- [ ] **REFACTOR**: Validate parent key format if provided
+
+**Force Flag:**
+- [ ] **RED**: Write `TestExportCommand_ForceFlag_Overwrites` - overwrites existing file
+- [ ] **RED**: Write `TestExportCommand_NoForce_Errors` - errors if file exists
+- [ ] **GREEN**: Add `--force, -f` flag
+- [ ] **GREEN**: Check `os.Stat(outputPath)` before writing
+- [ ] **REFACTOR**: Add helpful error message with `(use --force to overwrite)`
+
+**Error Handling:**
+- [ ] **RED**: Write `TestExportCommand_IssueNotFound` - shows "issue not found" error
+- [ ] **RED**: Write `TestExportCommand_NetworkError` - handles connection failures
+- [ ] **RED**: Write `TestExportCommand_PermissionDenied` - handles 403 response
+- [ ] **GREEN**: Wrap errors with context using `fmt.Errorf`
+- [ ] **REFACTOR**: Add user-friendly error messages
+
+#### 13.5 Integration Tests
+**Create `internal/application/export/service_integration_test.go`:**
+
+**End-to-End Flow:**
+- [ ] **RED**: Write `TestExport_E2E_WithMockJira` - full export with mock client
+- [ ] **RED**: Write `TestExport_E2E_WritesToFile` - file is created with correct content
+- [ ] **RED**: Write `TestExport_E2E_AllFieldsMapped` - verify all frontmatter fields
+- [ ] **GREEN**: Implement with mock Jira client returning realistic data
+- [ ] **REFACTOR**: Add test helpers for common assertions
+
+**Idempotency:**
+- [ ] **RED**: Write `TestExport_Idempotent_SameFilename` - re-export produces same filename
+- [ ] **RED**: Write `TestExport_Idempotent_SameContent` - re-export produces same content (except last-synced)
+- [ ] **GREEN**: Export same issue twice and compare
+- [ ] **REFACTOR**: Handle millisecond precision in timestamps
+
+**Edge Cases:**
+- [ ] **RED**: Write `TestExport_EdgeCase_VeryLongTitle` - handles 255+ char titles
+- [ ] **RED**: Write `TestExport_EdgeCase_SpecialCharsInDescription` - handles markdown in description
+- [ ] **RED**: Write `TestExport_EdgeCase_UnicodeInTitle` - handles unicode characters
+- [ ] **RED**: Write `TestExport_EdgeCase_NoBlocksLinks` - handles issue with only "Relates" links
+- [ ] **GREEN**: Ensure all edge cases pass
+- [ ] **REFACTOR**: Add property-based testing for robustness
+
+#### 13.6 Mock Client Updates
+- [ ] Add `GetIssueWithLinks` to mock client in `internal/adapters/jira/mock_client.go`
+- [ ] Add test fixtures for issue with links
+- [ ] Add test fixtures for issue without parent
+- [ ] Add test fixtures for issue with multiple link types
+
+---
+
+### Export Command Go Implementation
+
+```go
+// cmd/export.go
+package cmd
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+    "regexp"
+
+    "github.com/curtbushko/jira-sync/internal/adapters/filesystem"
+    "github.com/curtbushko/jira-sync/internal/adapters/hashing"
+    "github.com/curtbushko/jira-sync/internal/application/export"
+    "github.com/fatih/color"
+    "github.com/spf13/cobra"
+)
+
+var issueKeyRegex = regexp.MustCompile(`^[A-Z]+-\d+$`)
+
+var exportCmd = &cobra.Command{
+    Use:   "export <jira-id>",
+    Short: "Export a Jira issue to a local task file",
+    Long: `Export an existing Jira issue to a local markdown task file.
+
+The filename is generated from the issue's creation date in zettelkasten format.
+All relevant fields are mapped to frontmatter, and blocking dependencies are
+extracted from issue links.
+
+Arguments:
+  jira-id   Jira issue key (e.g., GUARD-123, CRE-456)
+
+Example:
+  jira-sync export GUARD-123
+  jira-sync export CRE-456 --output ./tasks/
+  jira-sync export GUARD-123 --parent GUARD-100 --force`,
+    Args: cobra.ExactArgs(1),
+    RunE: runExport,
+}
+
+func init() {
+    rootCmd.AddCommand(exportCmd)
+
+    exportCmd.Flags().StringP("output", "o", ".", "Output directory for task file")
+    exportCmd.Flags().StringP("parent", "p", "", "Override jira-parent value")
+    exportCmd.Flags().BoolP("force", "f", false, "Overwrite existing file")
+}
+
+func runExport(cmd *cobra.Command, args []string) error {
+    issueKey := args[0]
+
+    // Validate issue key format
+    if !issueKeyRegex.MatchString(issueKey) {
+        return fmt.Errorf("invalid issue key format: %s (expected PROJECT-NUMBER)", issueKey)
+    }
+
+    // Get flags
+    outputDir, _ := cmd.Flags().GetString("output")
+    parentOverride, _ := cmd.Flags().GetString("parent")
+    force, _ := cmd.Flags().GetBool("force")
+
+    // Create dependencies
+    jiraClient, err := createJiraClient()
+    if err != nil {
+        return err
+    }
+
+    repo := filesystem.NewFileTaskRepository()
+    hasher := hashing.NewSHA256HashComputer()
+
+    // Load existing tasks for dependency mapping
+    existingTasks, _ := repo.ListTasks(outputDir) // Ignore error, may be empty
+
+    // Create export service
+    svc := export.NewService(jiraClient, hasher, existingTasks)
+
+    // Export the issue
+    color.Cyan("Fetching %s...\n", issueKey)
+
+    result, err := svc.Export(cmd.Context(), issueKey, export.Options{
+        ParentOverride: parentOverride,
+    })
+    if err != nil {
+        return fmt.Errorf("export %s: %w", issueKey, err)
+    }
+
+    // Generate output path
+    outputPath := filepath.Join(outputDir, result.Filename)
+
+    // Check if file exists
+    if _, err := os.Stat(outputPath); err == nil && !force {
+        return fmt.Errorf("file already exists: %s (use --force to overwrite)", outputPath)
+    }
+
+    // Ensure output directory exists
+    if err := os.MkdirAll(outputDir, 0755); err != nil {
+        return fmt.Errorf("create output directory: %w", err)
+    }
+
+    // Set the path and write
+    result.Task.Path = outputPath
+    if err := repo.WriteTask(result.Task); err != nil {
+        return fmt.Errorf("write task file: %w", err)
+    }
+
+    // Print success
+    color.Green("✓ Found: %s", result.Task.Frontmatter.Title)
+    fmt.Printf("  Status: %s\n", result.Task.Frontmatter.JiraState)
+    fmt.Printf("  Created: %s\n", result.Task.Frontmatter.CreatedDate)
+    if result.Task.Frontmatter.JiraParent != "" {
+        fmt.Printf("  Parent: %s\n", result.Task.Frontmatter.JiraParent)
+    }
+
+    if len(result.Task.Frontmatter.JiraDependencies) > 0 {
+        fmt.Printf("\n✓ Found %d blocking dependencies\n", len(result.Task.Frontmatter.JiraDependencies))
+    }
+
+    color.Green("\n✓ Exported: %s", outputPath)
+
+    return nil
+}
+```
+
+### Export Service Go Implementation
+
+```go
+// internal/application/export/service.go
+package export
+
+import (
+    "context"
+    "fmt"
+    "path/filepath"
+    "time"
+
+    "github.com/curtbushko/jira-sync/internal/domain"
+    "github.com/curtbushko/jira-sync/internal/ports"
+)
+
+// Options holds export configuration
+type Options struct {
+    ParentOverride string
+}
+
+// Result holds the export result
+type Result struct {
+    Task     *domain.TaskFile
+    Filename string
+}
+
+// Service handles exporting Jira issues to task files
+type Service struct {
+    jira          ports.JiraClient
+    hasher        ports.HashComputer
+    existingTasks []*domain.TaskFile
+}
+
+// NewService creates a new export service
+func NewService(jira ports.JiraClient, hasher ports.HashComputer, existingTasks []*domain.TaskFile) *Service {
+    return &Service{
+        jira:          jira,
+        hasher:        hasher,
+        existingTasks: existingTasks,
+    }
+}
+
+// Export fetches a Jira issue and converts it to a TaskFile
+func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*Result, error) {
+    // Fetch issue with links
+    issue, err := s.jira.GetIssueWithLinks(ctx, issueKey)
+    if err != nil {
+        return nil, fmt.Errorf("fetch issue: %w", err)
+    }
+
+    // Parse creation date for filename
+    createdTime, err := s.parseJiraDatetime(issue.Created)
+    if err != nil {
+        return nil, fmt.Errorf("parse creation date: %w", err)
+    }
+
+    // Generate filename from creation date
+    filename := createdTime.Format("20060102-150405") + ".md"
+
+    // Extract dependencies from issue links
+    deps := s.extractDependencies(issue.Links)
+
+    // Determine parent
+    parent := issue.Parent
+    if opts.ParentOverride != "" {
+        parent = opts.ParentOverride
+    }
+
+    // Build task file
+    task := &domain.TaskFile{
+        Frontmatter: domain.Frontmatter{
+            Title:            issue.Summary,
+            JiraNumber:       issue.Key,
+            JiraProject:      issue.Project,
+            JiraState:        issue.Status,
+            CreatedDate:      createdTime.Format("2006-01-02"),
+            StartDate:        issue.StartDate,
+            EndDate:          issue.EndDate,
+            JiraURL:          issue.URL,
+            SyncStatus:       domain.SyncStatusLinked,
+            JiraParent:       parent,
+            SyncDependencies: []string{},
+            JiraDependencies: deps,
+            LastSynced:       time.Now().UTC().Format(time.RFC3339),
+        },
+        Description: issue.Description,
+    }
+
+    // Compute content hash
+    task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
+
+    return &Result{
+        Task:     task,
+        Filename: filename,
+    }, nil
+}
+
+// parseJiraDatetime parses Jira's datetime format
+func (s *Service) parseJiraDatetime(datetime string) (time.Time, error) {
+    // Jira format: "2026-01-15T14:30:45.000+0000"
+    formats := []string{
+        "2006-01-02T15:04:05.000-0700",
+        "2006-01-02T15:04:05.000Z",
+        time.RFC3339,
+    }
+
+    for _, format := range formats {
+        if t, err := time.Parse(format, datetime); err == nil {
+            return t, nil
+        }
+    }
+
+    return time.Time{}, fmt.Errorf("unable to parse datetime: %s", datetime)
+}
+
+// extractDependencies extracts blocking dependencies from issue links
+func (s *Service) extractDependencies(links []ports.IssueLink) []string {
+    var deps []string
+
+    for _, link := range links {
+        // Only consider "Blocks" links where this issue is blocked
+        if link.Type == "Blocks" && link.InwardIssue != "" {
+            // Try to map to wiki link format
+            wikiLink := s.mapToWikiLink(link.InwardIssue)
+            deps = append(deps, wikiLink)
+        }
+    }
+
+    return deps
+}
+
+// mapToWikiLink maps a Jira key to wiki link format if task exists locally
+func (s *Service) mapToWikiLink(jiraKey string) string {
+    for _, task := range s.existingTasks {
+        if task.Frontmatter.JiraNumber == jiraKey {
+            // Found matching task, create wiki link
+            return fmt.Sprintf("[%s](%s)", task.Frontmatter.Title, filepath.Base(task.Path))
+        }
+    }
+
+    // Not found locally, return plain Jira key
+    return jiraKey
+}
+```
+
+---
+
 ### Updated Implementation Checklist Summary
 
 #### Phase 1: Project Setup
@@ -5284,6 +5979,14 @@ func TestTransitionIssue_AlreadyInState(t *testing.T) {
 #### Phase 12: Status Transitions
 - [ ] 12.1 Transition service - RED/GREEN/REFACTOR
 
+#### Phase 13: Export Command
+- [ ] 13.1 Domain types (ExportOptions, ExportResult, IssueWithLinks) - RED/GREEN/REFACTOR
+- [ ] 13.2 Jira client GetIssueWithLinks + datetime parsing - RED/GREEN/REFACTOR
+- [ ] 13.3 Export service (export, filename, deps, wiki links, hash) - RED/GREEN/REFACTOR
+- [ ] 13.4 Export command (flags, validation, error handling) - RED/GREEN/REFACTOR
+- [ ] 13.5 Integration tests (E2E, idempotency, edge cases) - RED/GREEN/REFACTOR
+- [ ] 13.6 Mock client updates - RED/GREEN/REFACTOR
+
 ---
 
 ### Updated Dependency Graph
@@ -5309,6 +6012,8 @@ Phase 6 (CLI Commands - Basic) ────────────────�
     ↓                                              │
 Phase 11 (Full-Sync Service) ──────────────────────┤
     ↓                                              │
+Phase 13 (Export Command) ─────────────────────────┤
+    ↓                                              │
 Phase 12 (Status Transitions) ─────────────────────┘
     ↓
 Phase 7 (Configuration)
@@ -5322,4 +6027,5 @@ Phase 8 (Integration Tests)
 - Phase 6 requires 5
 - Phase 11 requires 5, 10
 - Phase 12 requires 4 (Real)
+- Phase 13 requires 2, 3, 4 (Real), 9 (can run in parallel with 11, 12)
 - Phases 7 and 8 come last

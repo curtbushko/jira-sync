@@ -135,6 +135,8 @@ linters-settings:
       - k
       - v
       - t
+      - tt
+      - tc
 
   funlen:
     lines: 80
