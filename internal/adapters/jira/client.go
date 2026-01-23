@@ -16,7 +16,9 @@ func readResponseBody(resp *jira.Response) string {
 	if resp == nil || resp.Body == nil {
 		return ""
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Sprintf("(failed to read body: %v)", err)
@@ -279,46 +281,61 @@ func (c *Client) GetIssueWithLinks(ctx context.Context, key string) (*ports.Issu
 		URL: fmt.Sprintf("%s/browse/%s", c.baseURL, issue.Key),
 	}
 
-	if issue.Fields != nil {
-		result.Summary = issue.Fields.Summary
-		result.Description = issue.Fields.Description
-
-		if issue.Fields.Status != nil {
-			result.Status = issue.Fields.Status.Name
-		}
-
-		if issue.Fields.Project.Key != "" {
-			result.Project = issue.Fields.Project.Key
-		}
-
-		if issue.Fields.Parent != nil {
-			result.Parent = issue.Fields.Parent.Key
-		}
-
-		// Extract creation date from the Created field
-		// jira.Time is a wrapper around time.Time, format it back to Jira string format
-		createdTime := time.Time(issue.Fields.Created)
-		if !createdTime.IsZero() {
-			result.Created = createdTime.Format("2006-01-02T15:04:05.000-0700")
-		}
-
-		// Extract issue links
-		if issue.Fields.IssueLinks != nil {
-			for _, link := range issue.Fields.IssueLinks {
-				issueLink := ports.IssueLink{
-					ID:   link.ID,
-					Type: link.Type.Name,
-				}
-				if link.InwardIssue != nil {
-					issueLink.InwardIssue = link.InwardIssue.Key
-				}
-				if link.OutwardIssue != nil {
-					issueLink.OutwardIssue = link.OutwardIssue.Key
-				}
-				result.Links = append(result.Links, issueLink)
-			}
-		}
+	if issue.Fields == nil {
+		return result, nil
 	}
 
+	populateIssueFields(result, issue)
 	return result, nil
+}
+
+// populateIssueFields extracts fields from a Jira issue into the result.
+func populateIssueFields(result *ports.IssueWithLinks, issue *jira.Issue) {
+	result.Summary = issue.Fields.Summary
+	result.Description = issue.Fields.Description
+
+	if issue.Fields.Status != nil {
+		result.Status = issue.Fields.Status.Name
+	}
+
+	if issue.Fields.Project.Key != "" {
+		result.Project = issue.Fields.Project.Key
+	}
+
+	if issue.Fields.Parent != nil {
+		result.Parent = issue.Fields.Parent.Key
+	}
+
+	// Extract creation date from the Created field
+	// jira.Time is a wrapper around time.Time, format it back to Jira string format
+	createdTime := time.Time(issue.Fields.Created)
+	if !createdTime.IsZero() {
+		result.Created = createdTime.Format("2006-01-02T15:04:05.000-0700")
+	}
+
+	// Extract issue links
+	result.Links = extractIssueLinks(issue.Fields.IssueLinks)
+}
+
+// extractIssueLinks converts Jira issue links to ports.IssueLink slice.
+func extractIssueLinks(jiraLinks []*jira.IssueLink) []ports.IssueLink {
+	if jiraLinks == nil {
+		return nil
+	}
+
+	links := make([]ports.IssueLink, 0, len(jiraLinks))
+	for _, link := range jiraLinks {
+		issueLink := ports.IssueLink{
+			ID:   link.ID,
+			Type: link.Type.Name,
+		}
+		if link.InwardIssue != nil {
+			issueLink.InwardIssue = link.InwardIssue.Key
+		}
+		if link.OutwardIssue != nil {
+			issueLink.OutwardIssue = link.OutwardIssue.Key
+		}
+		links = append(links, issueLink)
+	}
+	return links
 }

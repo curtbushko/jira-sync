@@ -83,6 +83,7 @@ Description`,
 		if err == nil {
 			if task == nil {
 				t.Error("Parse returned nil task without error")
+				return
 			}
 			if task.Path != "fuzz.md" {
 				t.Errorf("Expected path 'fuzz.md', got %q", task.Path)

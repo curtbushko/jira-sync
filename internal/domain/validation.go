@@ -45,26 +45,26 @@ func (f *FieldValidation) WarningMessage() string {
 		return ""
 	}
 	return f.FieldName + " truncated: " +
-		itoa(f.OriginalLen) + " chars exceeds limit of " +
-		itoa(f.MaxLength) + " chars"
+		intToString(f.OriginalLen) + " chars exceeds limit of " +
+		intToString(f.MaxLength) + " chars"
 }
 
-// itoa converts an int to string without importing strconv.
-func itoa(i int) string {
-	if i == 0 {
+// intToString converts an int to string without importing strconv.
+func intToString(value int) string {
+	if value == 0 {
 		return "0"
 	}
-	if i < 0 {
-		return "-" + itoa(-i)
+	if value < 0 {
+		return "-" + intToString(-value)
 	}
-	var b [20]byte
-	pos := len(b)
-	for i > 0 {
+	var buffer [20]byte
+	pos := len(buffer)
+	for value > 0 {
 		pos--
-		b[pos] = byte('0' + i%10)
-		i /= 10
+		buffer[pos] = byte('0' + value%10)
+		value /= 10
 	}
-	return string(b[pos:])
+	return string(buffer[pos:])
 }
 
 // ValidateAndTruncateSummary validates and truncates a summary field if needed.
@@ -111,20 +111,20 @@ func validateAndTruncate(text, fieldName string, maxLen int, suffix string) (str
 	return truncated, validation
 }
 
-// truncateToRunes truncates a string to n runes, preserving UTF-8 encoding.
-func truncateToRunes(s string, n int) string {
-	if n <= 0 {
+// truncateToRunes truncates a string to maxRunes runes, preserving UTF-8 encoding.
+func truncateToRunes(text string, maxRunes int) string {
+	if maxRunes <= 0 {
 		return ""
 	}
 
-	runes := 0
-	for i := range s {
-		if runes >= n {
-			return s[:i]
+	runeCount := 0
+	for idx := range text {
+		if runeCount >= maxRunes {
+			return text[:idx]
 		}
-		runes++
+		runeCount++
 	}
-	return s
+	return text
 }
 
 // FieldValidator provides methods for validating task fields with logging.
@@ -156,7 +156,7 @@ func (v *FieldValidator) ValidateTask(task *TaskFile) *ValidationResult {
 	// Log warnings if logger is configured
 	if v.logger != nil && result.HasWarnings() {
 		for _, warning := range result.Warnings() {
-			v.logger.Write([]byte("WARNING: " + task.Path + ": " + warning + "\n"))
+			_, _ = v.logger.Write([]byte("WARNING: " + task.Path + ": " + warning + "\n"))
 		}
 	}
 

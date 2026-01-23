@@ -57,9 +57,11 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 		}
 
 		// Hash should be valid hex
-		for _, c := range hash1 {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-				t.Errorf("Invalid hex character in hash: %c", c)
+		for _, char := range hash1 {
+			isDigit := char >= '0' && char <= '9'
+			isHexLetter := char >= 'a' && char <= 'f'
+			if !isDigit && !isHexLetter {
+				t.Errorf("Invalid hex character in hash: %c", char)
 				break
 			}
 		}

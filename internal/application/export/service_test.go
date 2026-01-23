@@ -82,14 +82,14 @@ func TestExport_FilenameFromCreationDate(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
 			mockJira := jira.NewMockJiraClient()
 			mockJira.AddStoredIssue(&ports.IssueWithLinks{
 				Key:     "TEST-1",
 				Project: "TEST",
 				Summary: "Test",
-				Created: tt.created,
+				Created: testCase.created,
 			})
 
 			svc := NewService(mockJira, &mockHashComputer{}, nil)
@@ -97,7 +97,7 @@ func TestExport_FilenameFromCreationDate(t *testing.T) {
 			result, err := svc.Export(context.Background(), "TEST-1", Options{})
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.expectedFilename, result.Filename)
+			assert.Equal(t, testCase.expectedFilename, result.Filename)
 		})
 	}
 }
@@ -405,19 +405,19 @@ func TestParseJiraDatetime(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseJiraDatetime(tt.input)
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			result, err := parseJiraDatetime(testCase.input)
 
-			if tt.wantErr {
+			if testCase.wantErr {
 				assert.Error(t, err)
 				return
 			}
 
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantYear, result.Year())
-			assert.Equal(t, tt.wantMonth, result.Month())
-			assert.Equal(t, tt.wantDay, result.Day())
+			assert.Equal(t, testCase.wantYear, result.Year())
+			assert.Equal(t, testCase.wantMonth, result.Month())
+			assert.Equal(t, testCase.wantDay, result.Day())
 		})
 	}
 }
