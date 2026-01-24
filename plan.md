@@ -79,6 +79,7 @@ Each task will be stored as a markdown file with the following format:
 title: "KB-2: Kubebuilder - Create Shared Types"
 jira-number: ""
 jira-project: GUARD
+jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
 start-date: 2026-01-16
@@ -112,6 +113,7 @@ Create shared type definitions that will be used across multiple controllers.
 title: "KB-1: Kubebuilder - Initialize Project and Repository"
 jira-number: ""
 jira-project: GUARD
+jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
 start-date: 2026-01-16
@@ -179,13 +181,14 @@ The `content-hash` field stores a SHA256 hash of the **entire file** (frontmatte
 | `title` | string | Task ID and title (e.g., "KB-1: Kubebuilder - Initialize Project") |
 | `jira-number` | string | Jira issue key (populated after creation, e.g., "GUARD-123") |
 | `jira-project` | string | Jira project key for this task (e.g., "GUARD") |
+| `jira-type` | string | Jira issue type (e.g., "Task", "Story", "Bug", "Epic"). Default: "Task" |
 | `jira-state` | string | Jira ticket state (default: "Todo", e.g., "Todo", "In Progress", "Done") |
 | `created-date` | date | Date the local file was created |
 | `start-date` | date | Date ticket was created in Jira (auto-set on creation) |
 | `end-date` | date | Start date + 7 days (auto-calculated) |
 | `jira-url` | string | Full URL to Jira issue (populated after creation) |
 | `sync-status` | string | Sync state: pending, created, linked (tracks sync with Jira, not ticket status) |
-| `jira-parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100") |
+| `jira-parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100"). **Not required for Epics.** |
 | `sync-dependencies` | array | Wiki links to tasks that must be created BEFORE this task (controls creation order, e.g., ["[KB-1: Title](20260116-103001.md)"]) |
 | `jira-dependencies` | array | Wiki links to tasks this task is blocked by (creates "blocks" links in Jira, e.g., ["[KB-1: Title](file.md)"]) |
 | `content-hash` | string | SHA256 hash of entire file (used to detect changes needing resync) |
@@ -203,6 +206,7 @@ When a task file is parsed, the following fields are checked and added if missin
 |-------|---------------|-------|
 | `jira-number` | `""` | Empty string (not yet created) |
 | `jira-project` | `""` | **Warning**: Must be set manually before sync |
+| `jira-type` | `"Task"` | Default issue type |
 | `jira-state` | `"Todo"` | Default state for new tickets |
 | `jira-url` | `""` | Empty string (populated on creation) |
 | `sync-status` | `"pending"` | Assumes not yet synced |
@@ -236,6 +240,7 @@ After migration:
 title: "KB-1: Initialize Project"
 jira-number: ""
 jira-project: ""
+jira-type: Task
 jira-state: Todo
 created-date: ""
 start-date: ""
@@ -366,8 +371,9 @@ jira-sync create [flags]
 | Flag | Short | Required | Description |
 |------|-------|----------|-------------|
 | `--title` | `-t` | Yes | Task ID and title (e.g., "KB-1: Initialize Project") |
-| `--jira-parent` | `-p` | Yes | Parent epic/story key (e.g., "GUARD-100") |
+| `--jira-parent` | `-p` | No | Parent epic/story key (e.g., "GUARD-100"). **Required except for Epics.** |
 | `--project` | | Yes | Jira project key (e.g., "GUARD") |
+| `--type` | | No | Jira issue type (default: "Task"). Options: "Task", "Story", "Bug", "Epic" |
 | `--description` | `-d` | Yes | Task description including acceptance criteria (can be multi-line, becomes Jira description) |
 | `--state` | | No | Jira ticket state (default: "Todo") |
 | `--sync-deps` | `-s` | No | Comma-separated task IDs for creation ordering (e.g., "KB-1,ERR-1") |
@@ -420,6 +426,24 @@ Check deployment.Status.UnavailableReplicas and create appropriate errors.
 - Unit tests with 0, 1, and multiple unavailable replicas
 EOF
 )"
+
+# Create an Epic (no jira-parent required)
+jira-sync create \
+  --title "GUARDIAN: Deployment Error Operator Epic" \
+  --project "GUARD" \
+  --type "Epic" \
+  --description "$(cat <<'EOF'
+Epic for the Deployment Error Operator project.
+
+This epic contains all tasks related to building the operator that detects
+and reports deployment errors in Kubernetes clusters.
+
+## Goals
+- Detect common deployment failures automatically
+- Surface errors via metrics and events
+- Integrate with existing monitoring solutions
+EOF
+)"
 ```
 
 **Output:**
@@ -431,6 +455,7 @@ Creates a file like `./tasks/20260116-103001.md`:
 title: "KB-1: Kubebuilder - Initialize Project and Repository"
 jira-number: ""
 jira-project: GUARD
+jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
 start-date: ""
@@ -1152,8 +1177,11 @@ func init() {
 
     // Required flags
     createCmd.Flags().StringP("title", "t", "", "Task ID and title (e.g., 'KB-1: Initialize Project')")
-    createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
+    createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100'). Required except for Epics.")
     createCmd.Flags().StringP("description", "d", "", "Task description including acceptance criteria (becomes Jira description)")
+
+    // Issue type flag
+    createCmd.Flags().String("type", "Task", "Jira issue type (Task, Story, Bug, Epic)")
 
     // Dependency flags
     createCmd.Flags().StringP("sync-deps", "s", "", "Comma-separated task IDs for creation ordering (e.g., 'KB-1,ERR-1')")
@@ -1165,7 +1193,7 @@ func init() {
 
     // Mark required
     createCmd.MarkFlagRequired("title")
-    createCmd.MarkFlagRequired("jira-parent")
+    // Note: jira-parent is NOT required for Epics (validated in runCreate)
     createCmd.MarkFlagRequired("description")
 
     // Bind output to viper for config file support
@@ -1190,11 +1218,17 @@ func runCreate(cmd *cobra.Command, args []string) error {
     // Get flag values
     title, _ := cmd.Flags().GetString("title")
     jiraParent, _ := cmd.Flags().GetString("jira-parent")
+    jiraType, _ := cmd.Flags().GetString("type")
     description, _ := cmd.Flags().GetString("description")
     syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
     jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
     depsStr, _ := cmd.Flags().GetString("deps")
     outputDir, _ := cmd.Flags().GetString("output")
+
+    // Validate jira-parent requirement (required for all types except Epic)
+    if jiraType != "Epic" && jiraParent == "" {
+        return fmt.Errorf("--jira-parent is required for issue type %q (only Epics can omit parent)", jiraType)
+    }
 
     // Parse dependencies
     // If --deps is set, use it for both; otherwise use individual flags
@@ -1232,6 +1266,7 @@ func runCreate(cmd *cobra.Command, args []string) error {
         Frontmatter: markdown.Frontmatter{
             Title:            title,
             JiraNumber:       "",
+            JiraType:         jiraType,
             CreatedDate:      now.Format("2006-01-02"),
             StartDate:        "",
             EndDate:          "",
@@ -2161,13 +2196,14 @@ type Frontmatter struct {
     Title            string   `yaml:"title"`
     JiraNumber       string   `yaml:"jira-number"`
     JiraProject      string   `yaml:"jira-project"`       // Jira project key (e.g., "GUARD")
+    JiraType         string   `yaml:"jira-type"`          // Jira issue type (e.g., "Task", "Story", "Bug", "Epic")
     JiraState        string   `yaml:"jira-state"`         // Jira ticket state (default: "Todo")
     CreatedDate      string   `yaml:"created-date"`
     StartDate        string   `yaml:"start-date"`
     EndDate          string   `yaml:"end-date"`
     JiraURL          string   `yaml:"jira-url"`
     SyncStatus       string   `yaml:"sync-status"`        // Tracks sync state, not Jira ticket status
-    JiraParent       string   `yaml:"jira-parent"`
+    JiraParent       string   `yaml:"jira-parent"`        // Parent epic/story (NOT required for Epics)
     SyncDependencies []string `yaml:"sync-dependencies"`  // Controls creation order (topological sort)
     JiraDependencies []string `yaml:"jira-dependencies"`  // Creates "blocks" links in Jira
     ContentHash      string   `yaml:"content-hash"`       // SHA256 of description for change detection
@@ -6029,3 +6065,291 @@ Phase 8 (Integration Tests)
 - Phase 12 requires 4 (Real)
 - Phase 13 requires 2, 3, 4 (Real), 9 (can run in parallel with 11, 12)
 - Phases 7 and 8 come last
+
+---
+
+## Phase 15: Jira Issue Type (jira-type) Support
+
+This phase adds support for the `jira-type` frontmatter field, allowing users to specify the Jira issue type (Task, Story, Bug, Epic) for each task. Epics do not require a `jira-parent`.
+
+### Problem Statement
+
+Currently, all tasks are created as "Task" issue type in Jira. Users need to:
+1. Create different issue types (Story, Bug, Epic, Sub-task, etc.)
+2. Create Epics without specifying a parent (Epics are top-level items)
+3. Have the issue type stored in the local task file for reference
+
+### New Frontmatter Field
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `jira-type` | string | Jira issue type (e.g., "Task", "Story", "Bug", "Epic"). Default: "Task" |
+
+**Validation Rules:**
+- `jira-type` defaults to "Task" if not specified
+- `jira-parent` is **required** for all types EXCEPT "Epic"
+- `jira-parent` is **optional** for "Epic" type
+
+### Example: Creating an Epic (no parent required)
+
+```yaml
+---
+title: "GUARDIAN: Deployment Error Operator Epic"
+jira-number: ""
+jira-project: GUARD
+jira-type: Epic
+jira-state: Todo
+created-date: 2026-01-16
+start-date: ""
+end-date: ""
+jira-url: ""
+sync-status: pending
+jira-parent: ""
+sync-dependencies: []
+jira-dependencies: []
+content-hash: ""
+last-synced: ""
+---
+
+Epic for the Deployment Error Operator project.
+```
+
+### Implementation Plan (TDD)
+
+#### Task 15.1: Add JiraType to Frontmatter Struct
+
+**Goal**: Add `jira-type` field to domain types
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestFrontmatter_HasJiraTypeField` - verifies field exists
+2. [ ] **RUN**: Confirm test fails (field doesn't exist)
+3. [ ] **IMPLEMENT (GREEN)**: Add `JiraType string yaml:"jira-type"` to Frontmatter struct
+4. [ ] **RUN**: Confirm test passes
+5. [ ] **VALIDATE**: Run all tests to ensure no regressions
+
+**Files**: `internal/domain/task.go`, `internal/domain/task_test.go`
+
+---
+
+#### Task 15.2: Add JiraType to Parser
+
+**Goal**: Parse `jira-type` from frontmatter YAML
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestParseTask_WithJiraType` - parses jira-type field
+2. [ ] **TEST (RED)**: Write test `TestParseTask_DefaultJiraType` - defaults to "Task" when missing
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Update parser to read jira-type field
+5. [ ] **RUN**: Confirm tests pass
+6. [ ] **VALIDATE**: Run full test suite
+
+**Files**: `internal/adapters/filesystem/parser.go`, `internal/adapters/filesystem/parser_test.go`
+
+---
+
+#### Task 15.3: Add JiraType to Writer
+
+**Goal**: Write `jira-type` to frontmatter YAML
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestWriteTask_IncludesJiraType` - jira-type appears in output
+2. [ ] **TEST (RED)**: Write test `TestWriteTask_JiraTypeOrdering` - field is in correct position
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Update writer to output jira-type field
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/adapters/filesystem/writer.go`, `internal/adapters/filesystem/writer_test.go`
+
+---
+
+#### Task 15.4: Add JiraType to Migration
+
+**Goal**: Add default `jira-type` during frontmatter migration
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestMigrateFrontmatter_AddsJiraType` - adds "Task" when missing
+2. [ ] **TEST (RED)**: Write test `TestMigrateFrontmatter_PreservesJiraType` - doesn't overwrite existing value
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Add jira-type migration logic
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/domain/task.go`, `internal/domain/task_test.go`
+
+---
+
+#### Task 15.5: Update Create Command with --type Flag
+
+**Goal**: Add `--type` flag to create command for specifying issue type
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestCreateCommand_TypeFlag_Default` - defaults to "Task"
+2. [ ] **TEST (RED)**: Write test `TestCreateCommand_TypeFlag_Epic` - accepts "Epic"
+3. [ ] **TEST (RED)**: Write test `TestCreateCommand_TypeFlag_Story` - accepts "Story"
+4. [ ] **TEST (RED)**: Write test `TestCreateCommand_TypeFlag_Bug` - accepts "Bug"
+5. [ ] **RUN**: Confirm tests fail
+6. [ ] **IMPLEMENT (GREEN)**: Add `--type` flag with default "Task"
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `cmd/create.go`, `cmd/create_test.go`
+
+---
+
+#### Task 15.6: Validate jira-parent Requirement Based on Type
+
+**Goal**: Require `jira-parent` for all types except Epic
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestCreateCommand_Task_RequiresParent` - error if Task without parent
+2. [ ] **TEST (RED)**: Write test `TestCreateCommand_Story_RequiresParent` - error if Story without parent
+3. [ ] **TEST (RED)**: Write test `TestCreateCommand_Bug_RequiresParent` - error if Bug without parent
+4. [ ] **TEST (RED)**: Write test `TestCreateCommand_Epic_NoParentRequired` - succeeds without parent
+5. [ ] **TEST (RED)**: Write test `TestCreateCommand_Epic_WithParent` - Epic can have optional parent
+6. [ ] **RUN**: Confirm tests fail
+7. [ ] **IMPLEMENT (GREEN)**: Add validation logic in runCreate
+8. [ ] **RUN**: Confirm tests pass
+
+**Files**: `cmd/create.go`, `cmd/create_test.go`
+
+---
+
+#### Task 15.7: Update Batch Creator to Use JiraType
+
+**Goal**: Use `jira-type` when creating issues in Jira
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestBatchCreator_UsesJiraType` - API call uses correct type
+2. [ ] **TEST (RED)**: Write test `TestBatchCreator_EpicNoParent` - Epic created without parent field
+3. [ ] **TEST (RED)**: Write test `TestBatchCreator_DefaultType` - uses "Task" when empty
+4. [ ] **RUN**: Confirm tests fail
+5. [ ] **IMPLEMENT (GREEN)**: Update createIssue to use task.Frontmatter.JiraType
+6. [ ] **IMPLEMENT (GREEN)**: Conditionally omit Parent field for Epics
+7. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/sync/batch.go`, `internal/sync/batch_test.go`
+
+---
+
+#### Task 15.8: Update Full-Sync to Handle JiraType
+
+**Goal**: Sync `jira-type` bidirectionally (read-only from Jira)
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestFullSync_JiraTypeSync` - jira-type synced from Jira
+2. [ ] **TEST (RED)**: Write test `TestFullSync_JiraTypeNoLocalUpdate` - local jira-type not pushed to Jira
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Add jira-type to compareFields (Jira → Local only)
+5. [ ] **RUN**: Confirm tests pass
+
+**Note**: Jira issue type typically cannot be changed after creation, so this is read-only sync.
+
+**Files**: `internal/sync/fullsync.go`, `internal/sync/fullsync_test.go`
+
+---
+
+#### Task 15.9: Update Export Command for JiraType
+
+**Goal**: Export command should capture issue type from Jira
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestExport_CapturesJiraType` - jira-type set from Jira
+2. [ ] **TEST (RED)**: Write test `TestExport_EpicType` - Epic exported correctly
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Map Jira issue type to jira-type field
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/application/export/service.go`, `internal/application/export/service_test.go`
+
+---
+
+#### Task 15.10: Update Config Defaults
+
+**Goal**: Add default issue type to configuration
+
+**TDD Steps**:
+1. [ ] **TEST (RED)**: Write test `TestConfig_DefaultIssueType` - defaults to "Task"
+2. [ ] **TEST (RED)**: Write test `TestConfig_CustomDefaultIssueType` - can be overridden
+3. [ ] **RUN**: Confirm tests fail
+4. [ ] **IMPLEMENT (GREEN)**: Use cfg.Defaults.IssueType when jira-type is empty
+5. [ ] **RUN**: Confirm tests pass
+
+**Files**: `internal/config/config.go`, `internal/config/config_test.go`
+
+---
+
+#### Task 15.11: Update Documentation and Examples
+
+**Goal**: Update all examples to include jira-type
+
+**Steps**:
+1. [ ] Update README.md examples with jira-type field
+2. [ ] Update plan.md task file format examples
+3. [ ] Add Epic example without jira-parent
+4. [ ] Update CLI help text
+
+**Files**: `jira/README.md`, `plan.md`
+
+---
+
+#### Task 15.12: Integration Testing
+
+**Goal**: End-to-end verification of jira-type functionality
+
+**Manual Test Cases**:
+1. [ ] Create Task with explicit `--type Task` → Creates Task in Jira
+2. [ ] Create Story with `--type Story` → Creates Story in Jira
+3. [ ] Create Bug with `--type Bug` → Creates Bug in Jira
+4. [ ] Create Epic with `--type Epic` (no parent) → Creates Epic in Jira
+5. [ ] Create Epic with `--type Epic --jira-parent PARENT` → Creates Epic with parent
+6. [ ] Create Task without parent → Error message
+7. [ ] Migrate old task file → jira-type added with "Task" default
+8. [ ] Export Epic from Jira → jira-type is "Epic", jira-parent may be empty
+9. [ ] Full-sync → jira-type updated from Jira
+
+---
+
+### Implementation Order
+
+Execute tasks in this order to maintain TDD discipline:
+
+```
+15.1 (JiraType field) → 15.2 (Parser) → 15.3 (Writer) → 15.4 (Migration)
+                                                              ↓
+                         15.5 (Create --type flag) → 15.6 (Parent validation)
+                                                              ↓
+                                              15.7 (Batch creator) → 15.10 (Config)
+                                                              ↓
+                                           15.8 (Full-sync) → 15.9 (Export)
+                                                              ↓
+                                                   15.11 (Docs) → 15.12 (Integration)
+```
+
+### Acceptance Criteria
+
+- [ ] `jira-type` field exists in frontmatter and defaults to "Task"
+- [ ] `jira-sync create --type Epic` creates task without requiring `--jira-parent`
+- [ ] `jira-sync create --type Task` requires `--jira-parent`
+- [ ] `jira-sync sync` creates issues with correct type in Jira
+- [ ] `jira-sync migrate` adds `jira-type: Task` to old task files
+- [ ] `jira-sync export` captures issue type from Jira
+- [ ] `jira-sync full-sync` updates local jira-type from Jira
+- [ ] All new code has unit tests with >80% coverage
+- [ ] `go test ./...` passes
+- [ ] `golangci-lint run` passes
+
+---
+
+### Updated Implementation Checklist
+
+#### Phase 15: Jira Issue Type
+- [ ] 15.1 Add JiraType to Frontmatter struct - RED/GREEN/REFACTOR
+- [ ] 15.2 Parser support for jira-type - RED/GREEN/REFACTOR
+- [ ] 15.3 Writer support for jira-type - RED/GREEN/REFACTOR
+- [ ] 15.4 Migration adds default jira-type - RED/GREEN/REFACTOR
+- [ ] 15.5 Create command --type flag - RED/GREEN/REFACTOR
+- [ ] 15.6 Parent validation based on type - RED/GREEN/REFACTOR
+- [ ] 15.7 Batch creator uses jira-type - RED/GREEN/REFACTOR
+- [ ] 15.8 Full-sync handles jira-type - RED/GREEN/REFACTOR
+- [ ] 15.9 Export captures jira-type - RED/GREEN/REFACTOR
+- [ ] 15.10 Config default issue type - RED/GREEN/REFACTOR
+- [ ] 15.11 Documentation updates
+- [ ] 15.12 Integration testing

@@ -33,19 +33,20 @@ func init() {
 
 	// Required flags
 	createCmd.Flags().StringP("title", "t", "", "Task ID and title (e.g., 'KB-1: Initialize Project')")
-	createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100')")
+	createCmd.Flags().StringP("jira-parent", "p", "", "Parent epic/story key (e.g., 'GUARD-100'). Required except for Epics.")
 	createCmd.Flags().StringP("description", "d", "", "Task description including acceptance criteria (becomes Jira description)")
 
 	// Optional flags
 	createCmd.Flags().String("jira-project", "", "Jira project key (e.g., 'GUARD')")
+	createCmd.Flags().String("type", domain.DefaultIssueType, "Jira issue type (Task, Story, Bug, Epic)")
 	createCmd.Flags().String("sync-deps", "", "Comma-separated task IDs for creation ordering (e.g., 'KB-1,ERR-1')")
 	createCmd.Flags().String("jira-deps", "", "Comma-separated task IDs for Jira 'blocks' links (e.g., 'KB-1,ERR-1')")
 	createCmd.Flags().String("deps", "", "Shorthand: sets BOTH sync-deps and jira-deps to the same value")
-	createCmd.Flags().StringP("output", "o", "./tasks", "Output directory for task files")
+	createCmd.Flags().StringP("output", "o", ".", "Output directory for task files")
 
 	// Mark required - errors ignored as flags are defined above
 	_ = createCmd.MarkFlagRequired("title")
-	_ = createCmd.MarkFlagRequired("jira-parent")
+	// Note: jira-parent is NOT required for Epics (validated in runCreate)
 	_ = createCmd.MarkFlagRequired("description")
 
 	// Bind output to viper for config file support
@@ -70,12 +71,18 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	// Get flag values
 	title, _ := cmd.Flags().GetString("title")
 	jiraParent, _ := cmd.Flags().GetString("jira-parent")
+	jiraType, _ := cmd.Flags().GetString("type")
 	description, _ := cmd.Flags().GetString("description")
 	jiraProject, _ := cmd.Flags().GetString("jira-project")
 	syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
 	jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
 	depsStr, _ := cmd.Flags().GetString("deps")
 	outputDir, _ := cmd.Flags().GetString("output")
+
+	// Validate jira-parent requirement (required for all types except Epic)
+	if !strings.EqualFold(jiraType, "Epic") && jiraParent == "" {
+		return fmt.Errorf("--jira-parent is required for issue type %q (only Epics can omit parent)", jiraType)
+	}
 
 	// Parse dependencies
 	// If --deps is set, use it for both; otherwise use individual flags
@@ -114,6 +121,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 			Title:            title,
 			JiraNumber:       "",
 			JiraProject:      jiraProject,
+			JiraType:         jiraType,
 			JiraState:        domain.DefaultJiraState,
 			CreatedDate:      now.Format("2006-01-02"),
 			StartDate:        "",
@@ -136,7 +144,10 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 
 	color.Green("✓ Created: %s", filePath)
 	fmt.Printf("  Title: %s\n", title)
-	fmt.Printf("  Jira-Parent: %s\n", jiraParent)
+	fmt.Printf("  Type: %s\n", jiraType)
+	if jiraParent != "" {
+		fmt.Printf("  Jira-Parent: %s\n", jiraParent)
+	}
 	if jiraProject != "" {
 		fmt.Printf("  Jira-Project: %s\n", jiraProject)
 	}

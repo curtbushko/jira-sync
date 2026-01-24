@@ -21,6 +21,7 @@ type Frontmatter struct {
 	Title            string   `yaml:"title"`
 	JiraNumber       string   `yaml:"jira-number"`
 	JiraProject      string   `yaml:"jira-project"`
+	JiraType         string   `yaml:"jira-type"`
 	JiraState        string   `yaml:"jira-state"`
 	CreatedDate      string   `yaml:"created-date"`
 	StartDate        string   `yaml:"start-date"`
@@ -99,6 +100,12 @@ func parseWikiLinkTaskID(link string) string {
 func (t *TaskFile) MigrateFrontmatter() bool {
 	migrated := false
 
+	// Set default JiraType if empty
+	if t.Frontmatter.JiraType == "" {
+		t.Frontmatter.JiraType = DefaultIssueType
+		migrated = true
+	}
+
 	// Set default JiraState if empty
 	if t.Frontmatter.JiraState == "" {
 		t.Frontmatter.JiraState = DefaultJiraState
@@ -123,4 +130,9 @@ func (t *TaskFile) MigrateFrontmatter() bool {
 	}
 
 	return migrated
+}
+
+// IsEpic returns true if this task's jira-type is "Epic".
+func (t *TaskFile) IsEpic() bool {
+	return strings.EqualFold(t.Frontmatter.JiraType, "Epic")
 }

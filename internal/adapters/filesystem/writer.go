@@ -21,6 +21,7 @@ type frontmatterOutput struct {
 	Title            string   `yaml:"title"`
 	JiraNumber       string   `yaml:"jira-number"`
 	JiraProject      string   `yaml:"jira-project"`
+	JiraType         string   `yaml:"jira-type"`
 	JiraState        string   `yaml:"jira-state"`
 	CreatedDate      string   `yaml:"created-date"`
 	StartDate        string   `yaml:"start-date"`
@@ -51,6 +52,7 @@ func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 		Title:            task.Frontmatter.Title,
 		JiraNumber:       task.Frontmatter.JiraNumber,
 		JiraProject:      task.Frontmatter.JiraProject,
+		JiraType:         task.Frontmatter.JiraType,
 		JiraState:        task.Frontmatter.JiraState,
 		CreatedDate:      task.Frontmatter.CreatedDate,
 		StartDate:        task.Frontmatter.StartDate,

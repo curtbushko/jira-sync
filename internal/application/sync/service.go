@@ -88,7 +88,8 @@ func (s *Service) needsResync(task *domain.TaskFile) bool {
 // CreateTickets creates Jira tickets for pending tasks.
 // Fields are validated and truncated if they exceed Jira limits.
 // Uses task's jira-project if set, otherwise falls back to defaultProject.
-func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, defaultProject, issueType string) error {
+// Uses task's jira-type if set, otherwise falls back to defaultIssueType.
+func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, defaultProject, defaultIssueType string) error {
 	now := time.Now()
 
 	for _, task := range tasks {
@@ -98,15 +99,28 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 			project = defaultProject
 		}
 
+		// Use task's jira-type if set, otherwise use default
+		issueType := task.Frontmatter.JiraType
+		if issueType == "" {
+			issueType = defaultIssueType
+		}
+
 		// Validate and truncate fields before sending to Jira
 		summary, description := s.validateTaskFields(task)
+
+		// For Epics, don't set a parent (Epics are top-level)
+		parent := task.Frontmatter.JiraParent
+		if strings.EqualFold(issueType, "Epic") && parent == "" {
+			// Explicitly empty parent is OK for Epics
+			parent = ""
+		}
 
 		issue, err := s.jira.CreateIssue(ctx, ports.CreateIssueRequest{
 			Project:     project,
 			Summary:     summary,
 			Description: description,
 			IssueType:   issueType,
-			Parent:      task.Frontmatter.JiraParent,
+			Parent:      parent,
 		})
 		if err != nil {
 			return fmt.Errorf("create ticket for %s: %w", task.Frontmatter.Title, err)

@@ -256,6 +256,7 @@ func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
 			Title:            "KB-1: Test Task",
 			JiraNumber:       "GUARD-123",
 			JiraProject:      "GUARD",
+			JiraType:         "Task",
 			JiraState:        "In Progress",
 			SyncStatus:       SyncStatusLinked,
 			JiraParent:       "GUARD-100",
@@ -271,6 +272,7 @@ func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
 	assert.False(t, migrated, "should return false when no migration needed")
 	assert.Equal(t, "In Progress", task.Frontmatter.JiraState) // unchanged
 	assert.Equal(t, SyncStatusLinked, task.Frontmatter.SyncStatus) // unchanged
+	assert.Equal(t, "Task", task.Frontmatter.JiraType) // unchanged
 }
 
 func TestMigrateFrontmatter_PartialFields(t *testing.T) {
@@ -298,6 +300,7 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 			Title:            "KB-1: Test",
 			JiraNumber:       "GUARD-999",
 			JiraProject:      "PROJ",
+			JiraType:         "Story",
 			JiraState:        "In Review",
 			SyncStatus:       SyncStatusCreated,
 			JiraParent:       "GUARD-100",
@@ -313,6 +316,7 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 	assert.False(t, migrated, "should not migrate when all fields present")
 	assert.Equal(t, "GUARD-999", task.Frontmatter.JiraNumber)
 	assert.Equal(t, "PROJ", task.Frontmatter.JiraProject)
+	assert.Equal(t, "Story", task.Frontmatter.JiraType)
 	assert.Equal(t, "In Review", task.Frontmatter.JiraState)
 	assert.Equal(t, SyncStatusCreated, task.Frontmatter.SyncStatus)
 	assert.Equal(t, existingDeps, task.Frontmatter.SyncDependencies)
@@ -338,4 +342,64 @@ func TestMigrateFrontmatter_InitializesEmptySlices(t *testing.T) {
 	assert.NotNil(t, task.Frontmatter.JiraDependencies)
 	assert.Len(t, task.Frontmatter.SyncDependencies, 0)
 	assert.Len(t, task.Frontmatter.JiraDependencies, 0)
+}
+
+func TestMigrateFrontmatter_SetsDefaultJiraType(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:    "KB-1: Test",
+			JiraType: "", // missing
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.True(t, migrated)
+	assert.Equal(t, DefaultIssueType, task.Frontmatter.JiraType)
+}
+
+func TestMigrateFrontmatter_PreservesExistingJiraType(t *testing.T) {
+	task := &TaskFile{
+		Frontmatter: Frontmatter{
+			Title:            "KB-1: Test",
+			JiraType:         "Epic",
+			JiraState:        "Todo",
+			SyncStatus:       SyncStatusPending,
+			SyncDependencies: []string{},
+			JiraDependencies: []string{},
+		},
+	}
+
+	migrated := task.MigrateFrontmatter()
+
+	assert.False(t, migrated)
+	assert.Equal(t, "Epic", task.Frontmatter.JiraType)
+}
+
+func TestIsEpic_True(t *testing.T) {
+	tests := []struct {
+		name     string
+		jiraType string
+		expected bool
+	}{
+		{"lowercase epic", "epic", true},
+		{"uppercase Epic", "Epic", true},
+		{"uppercase EPIC", "EPIC", true},
+		{"mixed case", "EpIc", true},
+		{"task", "Task", false},
+		{"story", "Story", false},
+		{"bug", "Bug", false},
+		{"empty", "", false},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			task := &TaskFile{
+				Frontmatter: Frontmatter{
+					JiraType: testCase.jiraType,
+				},
+			}
+			assert.Equal(t, testCase.expected, task.IsEpic())
+		})
+	}
 }
