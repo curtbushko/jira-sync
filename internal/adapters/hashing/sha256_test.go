@@ -224,3 +224,76 @@ func TestHashComputer_SyncDependenciesNotIncluded(t *testing.T) {
 	// Hash should be the same since only jira-dependencies are included
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
+
+// Phase 16: Date fields should be included in hash
+
+func TestHashComputer_DifferentJiraStartDateDifferentHash(t *testing.T) {
+	task1 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:         "Test",
+			JiraParent:    "P",
+			JiraStartDate: "2026-01-16",
+		},
+		Description: "Desc",
+	}
+	task2 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:         "Test",
+			JiraParent:    "P",
+			JiraStartDate: "2026-01-17",
+		},
+		Description: "Desc",
+	}
+
+	hasher := NewSHA256HashComputer()
+
+	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+}
+
+func TestHashComputer_DifferentJiraEndDateDifferentHash(t *testing.T) {
+	task1 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:       "Test",
+			JiraParent:  "P",
+			JiraEndDate: "2026-01-23",
+		},
+		Description: "Desc",
+	}
+	task2 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:       "Test",
+			JiraParent:  "P",
+			JiraEndDate: "2026-01-30",
+		},
+		Description: "Desc",
+	}
+
+	hasher := NewSHA256HashComputer()
+
+	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+}
+
+func TestHashComputer_SameDatesSameHash(t *testing.T) {
+	task1 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:         "Test",
+			JiraParent:    "P",
+			JiraStartDate: "2026-01-16",
+			JiraEndDate:   "2026-01-23",
+		},
+		Description: "Desc",
+	}
+	task2 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:         "Test",
+			JiraParent:    "P",
+			JiraStartDate: "2026-01-16",
+			JiraEndDate:   "2026-01-23",
+		},
+		Description: "Desc",
+	}
+
+	hasher := NewSHA256HashComputer()
+
+	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+}

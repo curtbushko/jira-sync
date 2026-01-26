@@ -77,33 +77,52 @@ func (d *ChangeDetector) hasLocalChanges(task *domain.TaskFile) bool {
 
 // hasJiraChanges checks if the Jira issue has changed since last sync.
 func (d *ChangeDetector) hasJiraChanges(task *domain.TaskFile, jiraIssue *ports.Issue) (bool, []string) {
-	var changedFields []string
-
 	// Parse last synced time
 	lastSynced := d.parseLastSynced(task.Frontmatter.LastSynced)
 
 	// Check if Jira was updated after last sync
 	jiraUpdatedAfterSync := jiraIssue.Updated.After(lastSynced)
 
-	// If Jira updated after last sync, check which fields differ
-	if jiraUpdatedAfterSync || lastSynced.IsZero() {
-		// Check title (summary)
-		if jiraIssue.Summary != task.Frontmatter.Title {
-			changedFields = append(changedFields, "title")
-		}
-
-		// Check description
-		if jiraIssue.Description != task.Description {
-			changedFields = append(changedFields, "description")
-		}
-
-		// Check status
-		if jiraIssue.Status != "" && jiraIssue.Status != task.Frontmatter.JiraState {
-			changedFields = append(changedFields, "status")
-		}
+	// If Jira not updated and we have a valid last sync time, no changes
+	if !jiraUpdatedAfterSync && !lastSynced.IsZero() {
+		return false, nil
 	}
 
+	// Check which fields differ
+	changedFields := d.compareJiraFields(task, jiraIssue)
 	return len(changedFields) > 0, changedFields
+}
+
+// compareJiraFields compares Jira issue fields with local task.
+func (d *ChangeDetector) compareJiraFields(task *domain.TaskFile, jiraIssue *ports.Issue) []string {
+	var changedFields []string
+
+	// Check title (summary)
+	if jiraIssue.Summary != task.Frontmatter.Title {
+		changedFields = append(changedFields, "title")
+	}
+
+	// Check description
+	if jiraIssue.Description != task.Description {
+		changedFields = append(changedFields, "description")
+	}
+
+	// Check status
+	if jiraIssue.Status != "" && jiraIssue.Status != task.Frontmatter.JiraState {
+		changedFields = append(changedFields, "status")
+	}
+
+	// Check start date
+	if jiraIssue.JiraStartDate != task.Frontmatter.JiraStartDate {
+		changedFields = append(changedFields, "jira-start-date")
+	}
+
+	// Check end date
+	if jiraIssue.JiraEndDate != task.Frontmatter.JiraEndDate {
+		changedFields = append(changedFields, "jira-end-date")
+	}
+
+	return changedFields
 }
 
 // getLocalChangedFields determines which fields changed locally.
@@ -118,6 +137,16 @@ func (d *ChangeDetector) getLocalChangedFields(task *domain.TaskFile, jiraIssue 
 	// Check description
 	if jiraIssue.Description != task.Description {
 		changedFields = append(changedFields, "description")
+	}
+
+	// Check start date
+	if jiraIssue.JiraStartDate != task.Frontmatter.JiraStartDate {
+		changedFields = append(changedFields, "jira-start-date")
+	}
+
+	// Check end date
+	if jiraIssue.JiraEndDate != task.Frontmatter.JiraEndDate {
+		changedFields = append(changedFields, "jira-end-date")
 	}
 
 	return changedFields

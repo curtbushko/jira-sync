@@ -123,8 +123,10 @@ func (s *Service) SyncAllTasks(ctx context.Context, tasks []*domain.TaskFile) ([
 // pushToJira updates the Jira issue with local changes.
 func (s *Service) pushToJira(ctx context.Context, task *domain.TaskFile) error {
 	return s.jira.UpdateIssue(ctx, task.Frontmatter.JiraNumber, ports.UpdateIssueRequest{
-		Summary:     task.Frontmatter.Title,
-		Description: task.Description,
+		Summary:       task.Frontmatter.Title,
+		Description:   task.Description,
+		JiraStartDate: task.Frontmatter.JiraStartDate,
+		JiraEndDate:   task.Frontmatter.JiraEndDate,
 	})
 }
 
@@ -135,6 +137,14 @@ func (s *Service) pullFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 
 	if jiraIssue.Status != "" {
 		task.Frontmatter.JiraState = jiraIssue.Status
+	}
+
+	// Update date fields from Jira
+	if jiraIssue.JiraStartDate != "" {
+		task.Frontmatter.JiraStartDate = jiraIssue.JiraStartDate
+	}
+	if jiraIssue.JiraEndDate != "" {
+		task.Frontmatter.JiraEndDate = jiraIssue.JiraEndDate
 	}
 }
 
