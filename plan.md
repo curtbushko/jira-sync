@@ -24,7 +24,7 @@ After analyzing the requirements, a **custom Go CLI** is the better approach for
 3. **Batch operations**: Need transaction-like behavior with rollback on failure
 4. **Error handling**: Go provides better error handling than bash scripts
 5. **JSON parsing**: jira-cli outputs JSON, but parsing nested structures in bash is error-prone
-6. **Field mapping**: Custom fields (start-date, end-date) require API calls that jira-cli may not support directly
+6. **Field mapping**: Custom fields (jira-start-date, jira-end-date) require API calls that jira-cli may not support directly
 
 **Why Go CLI?**
 
@@ -82,8 +82,8 @@ jira-project: GUARD
 jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
-start-date: 2026-01-16
-end-date: 2026-01-23
+jira-start-date: 2026-01-16
+jira-end-date: 2026-01-23
 jira-url: ""
 sync-status: pending
 jira-parent: GUARDIAN
@@ -116,8 +116,8 @@ jira-project: GUARD
 jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
-start-date: 2026-01-16
-end-date: 2026-01-23
+jira-start-date: 2026-01-16
+jira-end-date: 2026-01-23
 jira-url: ""
 sync-status: pending
 jira-parent: GUARDIAN
@@ -184,8 +184,8 @@ The `content-hash` field stores a SHA256 hash of the **entire file** (frontmatte
 | `jira-type` | string | Jira issue type (e.g., "Task", "Story", "Bug", "Epic"). Default: "Task" |
 | `jira-state` | string | Jira ticket state (default: "Todo", e.g., "Todo", "In Progress", "Done") |
 | `created-date` | date | Date the local file was created |
-| `start-date` | date | Date ticket was created in Jira (auto-set on creation) |
-| `end-date` | date | Start date + 7 days (auto-calculated) |
+| `jira-start-date` | date | Start date in Jira (synced bidirectionally with Jira custom field) |
+| `jira-end-date` | date | End date in Jira (synced bidirectionally with Jira custom field) |
 | `jira-url` | string | Full URL to Jira issue (populated after creation) |
 | `sync-status` | string | Sync state: pending, created, linked (tracks sync with Jira, not ticket status) |
 | `jira-parent` | string | Parent epic/story key (e.g., "GUARDIAN" or "GUARD-100"). **Not required for Epics.** |
@@ -243,8 +243,8 @@ jira-project: ""
 jira-type: Task
 jira-state: Todo
 created-date: ""
-start-date: ""
-end-date: ""
+jira-start-date: ""
+jira-end-date: ""
 jira-url: ""
 sync-status: pending
 jira-parent: GUARD-100
@@ -458,8 +458,8 @@ jira-project: GUARD
 jira-type: Task
 jira-state: Todo
 created-date: 2026-01-16
-start-date: ""
-end-date: ""
+jira-start-date: ""
+jira-end-date: ""
 jira-url: ""
 sync-status: pending
 jira-parent: GUARD-100
@@ -609,8 +609,8 @@ jira-sync full-sync [tasks-dir] [flags]
 | `jira-state` | `status` | Ticket status (Todo, In Progress, Done, etc.) |
 | `jira-parent` | `parent` | Parent epic/story |
 | `jira-dependencies` | Issue links | "Blocks" links between tickets |
-| `start-date` | Custom field | Start date |
-| `end-date` | Custom field | End date |
+| `jira-start-date` | Custom field | Start date (synced bidirectionally) |
+| `jira-end-date` | Custom field | End date (synced bidirectionally) |
 
 **Jira-Dependencies Sync:**
 
@@ -1824,7 +1824,46 @@ func (s *FullSyncer) compareFields(task *markdown.TaskFile, issue *jira.Issue) [
         }
     }
 
+    // Jira Start Date (custom field)
+    if s.shouldSync("jira-start-date") {
+        localDate := task.Frontmatter.JiraStartDate
+        jiraDate := s.extractCustomField(issue, s.cfg.CustomFields.StartDate)
+        if localDate != jiraDate {
+            diffs = append(diffs, FieldComparison{
+                Field:      "jira-start-date",
+                LocalValue: localDate,
+                JiraValue:  jiraDate,
+            })
+        }
+    }
+
+    // Jira End Date (custom field)
+    if s.shouldSync("jira-end-date") {
+        localDate := task.Frontmatter.JiraEndDate
+        jiraDate := s.extractCustomField(issue, s.cfg.CustomFields.EndDate)
+        if localDate != jiraDate {
+            diffs = append(diffs, FieldComparison{
+                Field:      "jira-end-date",
+                LocalValue: localDate,
+                JiraValue:  jiraDate,
+            })
+        }
+    }
+
     return diffs
+}
+
+// extractCustomField extracts a custom field value from a Jira issue
+func (s *FullSyncer) extractCustomField(issue *jira.Issue, fieldID string) string {
+    if fieldID == "" || issue.Fields.Unknowns == nil {
+        return ""
+    }
+    if val, ok := issue.Fields.Unknowns[fieldID]; ok {
+        if str, ok := val.(string); ok {
+            return str
+        }
+    }
+    return ""
 }
 
 // extractBlockingLinks extracts task IDs from Jira "blocks" links
@@ -2199,8 +2238,8 @@ type Frontmatter struct {
     JiraType         string   `yaml:"jira-type"`          // Jira issue type (e.g., "Task", "Story", "Bug", "Epic")
     JiraState        string   `yaml:"jira-state"`         // Jira ticket state (default: "Todo")
     CreatedDate      string   `yaml:"created-date"`
-    StartDate        string   `yaml:"start-date"`
-    EndDate          string   `yaml:"end-date"`
+    JiraStartDate    string   `yaml:"jira-start-date"`
+    JiraEndDate      string   `yaml:"jira-end-date"`
     JiraURL          string   `yaml:"jira-url"`
     SyncStatus       string   `yaml:"sync-status"`        // Tracks sync state, not Jira ticket status
     JiraParent       string   `yaml:"jira-parent"`        // Parent epic/story (NOT required for Epics)
@@ -3221,8 +3260,8 @@ jira-number: "GUARD-101"
 jira-project: GUARD
 jira-state: Todo
 created-date: 2026-01-16
-start-date: 2026-01-16
-end-date: 2026-01-23
+jira-start-date: 2026-01-16
+jira-end-date: 2026-01-23
 jira-url: "https://company.atlassian.net/browse/GUARD-101"
 sync-status: linked
 jira-parent: GUARD-100
@@ -3246,8 +3285,8 @@ This becomes the Jira ticket description field.
 | `jira-project` | string | Jira project key (e.g., "GUARD") | Manual/create |
 | `jira-state` | string | Jira ticket state (default: "Todo") | Manual/create, full-sync |
 | `created-date` | date | Date file was created | jira-sync create |
-| `start-date` | date | Date ticket created in Jira | jira-sync sync |
-| `end-date` | date | start-date + 7 days | jira-sync sync |
+| `jira-start-date` | date | Start date in Jira (synced bidirectionally) | jira-sync sync/full-sync |
+| `jira-end-date` | date | End date in Jira (synced bidirectionally) | jira-sync sync/full-sync |
 | `jira-url` | string | Full URL to Jira issue | jira-sync sync |
 | `sync-status` | string | Sync state: pending, created, linked | jira-sync sync |
 | `jira-parent` | string | Parent epic/story key | Manual/create |
@@ -3406,7 +3445,7 @@ After running `jira-sync sync`:
 - `jira-number` will contain the Jira key (e.g., GUARD-101)
 - `jira-url` will contain the full URL
 - `sync-status` will be `linked`
-- `start-date` and `end-date` will be set
+- `jira-start-date` and `jira-end-date` will be synced with Jira custom fields
 
 ## For AI Assistants (Claude)
 
@@ -5335,8 +5374,8 @@ The export command maps Jira fields to frontmatter fields:
 | `fields.project.key` | `jira-project` | Project key extracted from issue |
 | `fields.status.name` | `jira-state` | Current status |
 | `fields.created` | `created-date` | Issue creation date (date only) |
-| `fields.customfield_*` | `start-date` | Start date custom field (if configured) |
-| `fields.customfield_*` | `end-date` | End date custom field (if configured) |
+| `fields.customfield_*` | `jira-start-date` | Start date custom field (synced bidirectionally) |
+| `fields.customfield_*` | `jira-end-date` | End date custom field (synced bidirectionally) |
 | `self` or constructed | `jira-url` | Full URL to the issue |
 | (always) | `sync-status` | Set to "linked" (already exists in Jira) |
 | `fields.parent.key` | `jira-parent` | Parent epic/story key |
@@ -5377,8 +5416,8 @@ jira-number: GUARD-123
 jira-project: GUARD
 jira-state: In Progress
 created-date: 2026-01-15
-start-date: 2026-01-15
-end-date: 2026-01-22
+jira-start-date: 2026-01-15
+jira-end-date: 2026-01-22
 jira-url: https://company.atlassian.net/browse/GUARD-123
 sync-status: linked
 jira-parent: GUARD-100
@@ -6100,8 +6139,8 @@ jira-project: GUARD
 jira-type: Epic
 jira-state: Todo
 created-date: 2026-01-16
-start-date: ""
-end-date: ""
+jira-start-date: ""
+jira-end-date: ""
 jira-url: ""
 sync-status: pending
 jira-parent: ""
@@ -6353,3 +6392,172 @@ Execute tasks in this order to maintain TDD discipline:
 - [ ] 15.10 Config default issue type - RED/GREEN/REFACTOR
 - [ ] 15.11 Documentation updates
 - [ ] 15.12 Integration testing
+
+## Phase 16: Jira Date Fields (jira-start-date, jira-end-date) Bidirectional Sync
+
+This phase implements bidirectional synchronization for start and end date fields between local task files and Jira custom fields.
+
+### Overview
+
+The `jira-start-date` and `jira-end-date` fields map to Jira custom fields (configurable in the config file). These dates are:
+- Synced from local to Jira when creating/updating tickets
+- Synced from Jira to local during full-sync
+- Exported correctly when using the export command
+
+### Configuration
+
+Add custom field IDs to the config file:
+
+```yaml
+# .jira-sync.yaml
+jira:
+  url: https://company.atlassian.net
+  user: user@company.com
+
+custom_fields:
+  start_date: customfield_10015  # Jira custom field ID for start date
+  end_date: customfield_10016    # Jira custom field ID for end date
+```
+
+### Date Format
+
+- **Local format**: `YYYY-MM-DD` (e.g., "2026-01-16")
+- **Jira format**: ISO 8601 date (e.g., "2026-01-16")
+
+### Implementation TODOs
+
+#### 16.1 Configuration Updates
+- [ ] **RED**: Write `TestConfig_CustomFieldsLoading` - test loading custom field IDs from config
+- [ ] **RED**: Write `TestConfig_CustomFieldsDefaults` - test default values when not configured
+- [ ] **GREEN**: Add `CustomFields` struct to `internal/config/config.go`:
+  ```go
+  type CustomFieldsConfig struct {
+      StartDate string `yaml:"start_date"` // Jira custom field ID
+      EndDate   string `yaml:"end_date"`   // Jira custom field ID
+  }
+  ```
+- [ ] **GREEN**: Add `CustomFields CustomFieldsConfig` to `Config` struct
+- [ ] **GREEN**: Load custom field IDs in `Load()` function
+- [ ] **REFACTOR**: Add validation for custom field ID format (customfield_NNNNN)
+
+#### 16.2 Domain Type Updates
+- [ ] **RED**: Write `TestFrontmatter_JiraStartDate` - test parsing jira-start-date field
+- [ ] **RED**: Write `TestFrontmatter_JiraEndDate` - test parsing jira-end-date field
+- [ ] **GREEN**: Verify `Frontmatter` struct has renamed fields:
+  ```go
+  JiraStartDate string `yaml:"jira-start-date"`
+  JiraEndDate   string `yaml:"jira-end-date"`
+  ```
+- [ ] **REFACTOR**: Update all references from `StartDate`/`EndDate` to `JiraStartDate`/`JiraEndDate`
+
+#### 16.3 Parser Updates
+- [ ] **RED**: Write `TestParseTaskFile_WithDates` - test parsing files with date fields
+- [ ] **RED**: Write `TestParseTaskFile_EmptyDates` - test parsing files with empty date fields
+- [ ] **RED**: Write `TestParseTaskFile_InvalidDateFormat` - test handling invalid date formats
+- [ ] **GREEN**: Update parser to read `jira-start-date` and `jira-end-date` fields
+- [ ] **REFACTOR**: Add date format validation helper function
+
+#### 16.4 Writer Updates
+- [ ] **RED**: Write `TestWriteTaskFile_WithDates` - test writing files with date fields
+- [ ] **RED**: Write `TestWriteTaskFile_EmptyDates` - test writing files with empty dates
+- [ ] **GREEN**: Update writer to output `jira-start-date` and `jira-end-date` fields
+- [ ] **REFACTOR**: Ensure consistent date format in output
+
+#### 16.5 Migration Updates
+- [ ] **RED**: Write `TestMigrate_AddsMissingDateFields` - test migration adds empty date fields
+- [ ] **RED**: Write `TestMigrate_RenamesOldDateFields` - test migration renames start-date → jira-start-date
+- [ ] **GREEN**: Add migration logic to detect old field names and rename them
+- [ ] **GREEN**: Add default empty values for missing date fields
+- [ ] **REFACTOR**: Add migration log message when renaming fields
+
+#### 16.6 Sync Command - Create Tickets with Dates
+- [ ] **RED**: Write `TestSync_CreateTicketWithDates` - test ticket creation includes dates
+- [ ] **RED**: Write `TestSync_CreateTicketNoDates` - test ticket creation without dates
+- [ ] **RED**: Write `TestSync_CustomFieldMapping` - test custom field ID mapping
+- [ ] **GREEN**: Update `CreateTicket()` to include custom date fields in issue creation
+- [ ] **GREEN**: Read custom field IDs from config
+- [ ] **GREEN**: Map local date to Jira custom field format
+- [ ] **REFACTOR**: Extract custom field handling to separate function
+
+#### 16.7 Full-Sync - Bidirectional Date Sync
+- [ ] **RED**: Write `TestFullSync_LocalDateToJira` - test local date changes sync to Jira
+- [ ] **RED**: Write `TestFullSync_JiraDateToLocal` - test Jira date changes sync to local
+- [ ] **RED**: Write `TestFullSync_DateConflict` - test conflict when both dates changed
+- [ ] **RED**: Write `TestFullSync_EmptyToPopulated` - test syncing when one side has date, other empty
+- [ ] **GREEN**: Add `jira-start-date` to `compareFields()` in full-sync:
+  ```go
+  if s.shouldSync("jira-start-date") {
+      localDate := task.Frontmatter.JiraStartDate
+      jiraDate := s.extractCustomField(issue, cfg.CustomFields.StartDate)
+      if localDate != jiraDate {
+          diffs = append(diffs, FieldComparison{
+              Field:      "jira-start-date",
+              LocalValue: localDate,
+              JiraValue:  jiraDate,
+          })
+      }
+  }
+  ```
+- [ ] **GREEN**: Add `jira-end-date` to `compareFields()` similarly
+- [ ] **GREEN**: Implement `extractCustomField(issue, fieldID)` helper
+- [ ] **GREEN**: Update `updateJira()` to handle date field updates
+- [ ] **GREEN**: Update `updateLocal()` to handle date field updates
+- [ ] **REFACTOR**: Add date parsing/formatting helper functions
+
+#### 16.8 Export Command - Capture Dates
+- [ ] **RED**: Write `TestExport_ExtractsDates` - test export captures dates from Jira
+- [ ] **RED**: Write `TestExport_MissingDates` - test export handles missing dates
+- [ ] **GREEN**: Update export to read custom date fields from Jira issue
+- [ ] **GREEN**: Map Jira custom fields to local `jira-start-date` and `jira-end-date`
+- [ ] **REFACTOR**: Reuse custom field extraction helper from full-sync
+
+#### 16.9 Jira Client Extension
+- [ ] **RED**: Write `TestJiraClient_GetCustomField` - test extracting custom field value
+- [ ] **RED**: Write `TestJiraClient_SetCustomField` - test setting custom field value
+- [ ] **RED**: Write `TestJiraClient_CustomFieldNotFound` - test handling missing custom field
+- [ ] **GREEN**: Add `GetCustomField(issue, fieldID)` method
+- [ ] **GREEN**: Add `SetCustomField(issueKey, fieldID, value)` method
+- [ ] **REFACTOR**: Add type assertion for date string values
+
+#### 16.10 Content Hash Updates
+- [ ] **RED**: Write `TestContentHash_IncludesDates` - test dates affect content hash
+- [ ] **GREEN**: Update `ComputeContentHash()` to include date fields:
+  ```go
+  buf.WriteString(t.Frontmatter.JiraStartDate)
+  buf.WriteString(t.Frontmatter.JiraEndDate)
+  ```
+- [ ] **REFACTOR**: Consider if date changes should trigger resync (yes)
+
+#### 16.11 Integration Testing
+- [ ] **RED**: Write integration test for full date sync lifecycle:
+  1. Create task with dates locally
+  2. Sync to Jira - verify dates appear in custom fields
+  3. Modify dates in Jira
+  4. Full-sync - verify local dates updated
+  5. Modify dates locally
+  6. Full-sync - verify Jira dates updated
+- [ ] **GREEN**: Implement integration test with mock Jira server
+- [ ] **REFACTOR**: Add test helper for date field setup
+
+#### 16.12 Documentation Updates
+- [ ] Update plan.md frontmatter field table
+- [ ] Update plan.md full-sync fields synchronized table
+- [ ] Update plan.md export field mapping table
+- [ ] Add configuration section for custom field IDs
+- [ ] Update README.md with date field usage examples
+
+### Updated Implementation Checklist
+
+#### Phase 16: Jira Date Fields
+- [ ] 16.1 Configuration updates for custom field IDs - RED/GREEN/REFACTOR
+- [ ] 16.2 Domain type updates (Frontmatter struct) - RED/GREEN/REFACTOR
+- [ ] 16.3 Parser updates for date fields - RED/GREEN/REFACTOR
+- [ ] 16.4 Writer updates for date fields - RED/GREEN/REFACTOR
+- [ ] 16.5 Migration for old field names - RED/GREEN/REFACTOR
+- [ ] 16.6 Sync command creates tickets with dates - RED/GREEN/REFACTOR
+- [ ] 16.7 Full-sync bidirectional date sync - RED/GREEN/REFACTOR
+- [ ] 16.8 Export command captures dates - RED/GREEN/REFACTOR
+- [ ] 16.9 Jira client custom field methods - RED/GREEN/REFACTOR
+- [ ] 16.10 Content hash includes dates - RED/GREEN/REFACTOR
+- [ ] 16.11 Integration testing
+- [ ] 16.12 Documentation updates
