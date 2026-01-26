@@ -157,12 +157,19 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 		status = issue.Fields.Status.Name
 	}
 
+	// Extract updated timestamp
+	var updated time.Time
+	if issue.Fields != nil {
+		updated = time.Time(issue.Fields.Updated)
+	}
+
 	return &ports.Issue{
 		Key:         issue.Key,
 		Self:        issue.Self,
 		Summary:     issue.Fields.Summary,
 		Description: issue.Fields.Description,
 		Status:      status,
+		Updated:     updated,
 	}, nil
 }
 
