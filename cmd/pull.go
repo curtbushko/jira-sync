@@ -92,7 +92,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	pullCtx, err := createPullContext(repo)
+	pullCtx, err := createPullContext(repo, tasks)
 	if err != nil {
 		return err
 	}
@@ -144,7 +144,7 @@ func printPullSummary(tasks []*domain.TaskFile) {
 func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullFlags) error {
 	color.Yellow("Dry run - no changes will be made\n")
 
-	pullCtx, err := createPullContext(nil)
+	pullCtx, err := createPullContext(nil, tasks)
 	if err != nil {
 		return err
 	}
@@ -192,7 +192,7 @@ func confirmPull(taskCount int) bool {
 	return response == "y" || response == "Y"
 }
 
-func createPullContext(repo ports.TaskRepository) (*pullContext, error) {
+func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (*pullContext, error) {
 	jiraURL := viper.GetString("jira.url")
 	jiraUser := viper.GetString("jira.user")
 	jiraToken := viper.GetString("token")
@@ -214,6 +214,9 @@ func createPullContext(repo ports.TaskRepository) (*pullContext, error) {
 
 	hasher := hashing.NewSHA256HashComputer()
 	service := fullsync.NewService(jiraClient, hasher)
+
+	// Set all tasks for dependency mapping
+	service.SetAllTasks(allTasks)
 
 	return &pullContext{
 		repo:    repo,

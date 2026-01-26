@@ -28,10 +28,11 @@ const (
 
 // PullResult contains the result of pulling a task from Jira.
 type PullResult struct {
-	Task   *domain.TaskFile
-	Action PullAction
-	Fields []string
-	Error  error
+	Task             *domain.TaskFile
+	Action           PullAction
+	Fields           []string
+	DependencyResult *DependencyChangeResult // nil if no dependency changes
+	Error            error
 }
 
 // PullOption configures pull behavior.
@@ -230,6 +231,7 @@ func (s *Service) SyncDependenciesOnly(ctx context.Context, task *domain.TaskFil
 
 // PullTask pulls Jira changes to a local task file.
 // Returns a PullResult indicating what action was taken.
+// Also syncs jira-dependencies if allTasks is set.
 func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile, opts ...PullOption) *PullResult {
 	options := &pullOptions{}
 	for _, opt := range opts {
@@ -250,13 +252,15 @@ func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile, opts ...P
 	// Detect changes
 	changeResult := s.detector.Detect(task, jiraIssue)
 
+	var result *PullResult
+
 	// Handle based on change type
 	switch changeResult.Type {
 	case ChangeTypeJiraToLocal:
 		// Pull Jira changes to local
 		s.pullFromJira(task, jiraIssue)
 		s.updateLastSynced(task)
-		return &PullResult{
+		result = &PullResult{
 			Task:   task,
 			Action: PullActionUpdated,
 			Fields: changeResult.Fields,
@@ -267,24 +271,40 @@ func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile, opts ...P
 			// Force overwrite local with Jira
 			s.pullFromJira(task, jiraIssue)
 			s.updateLastSynced(task)
-			return &PullResult{
+			result = &PullResult{
 				Task:   task,
 				Action: PullActionUpdated,
 				Fields: changeResult.Fields,
 			}
-		}
-		return &PullResult{
-			Task:   task,
-			Action: PullActionConflict,
-			Fields: changeResult.Fields,
+		} else {
+			result = &PullResult{
+				Task:   task,
+				Action: PullActionConflict,
+				Fields: changeResult.Fields,
+			}
 		}
 
 	case ChangeTypeLocalToJira, ChangeTypeNone:
 		// No Jira changes to pull
-		return &PullResult{Task: task, Action: PullActionSkipped}
+		result = &PullResult{Task: task, Action: PullActionSkipped}
 	}
 
-	return &PullResult{Task: task, Action: PullActionSkipped}
+	if result == nil {
+		result = &PullResult{Task: task, Action: PullActionSkipped}
+	}
+
+	// Also sync jira-dependencies (if allTasks is set and no conflict)
+	if s.allTasks != nil && result.Action != PullActionConflict {
+		depResult, err := s.syncDependencies(ctx, task)
+		if err != nil {
+			result.Error = err
+			result.Action = PullActionError
+			return result
+		}
+		result.DependencyResult = depResult
+	}
+
+	return result
 }
 
 // PullAll pulls Jira changes to all tasks.

@@ -140,14 +140,16 @@ func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile
 
 	// Create links for each task based on jira-dependencies
 	for _, task := range tasks {
-		if len(task.Frontmatter.JiraDependencies) == 0 {
+		// Extract task IDs from jira-dependencies (handles wiki link format)
+		depIDs := task.GetJiraDependencyIDs()
+		if len(depIDs) == 0 {
 			task.Frontmatter.SyncStatus = domain.SyncStatusLinked
 			continue
 		}
 
 		blockedIssue := task.Frontmatter.JiraNumber
 
-		for _, depID := range task.Frontmatter.JiraDependencies {
+		for _, depID := range depIDs {
 			blockerIssue, ok := idMap[depID]
 			if !ok {
 				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, depID, task.Frontmatter.Title)

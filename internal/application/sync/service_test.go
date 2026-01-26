@@ -267,6 +267,46 @@ func TestSyncService_LinkDependencies_MissingDep(t *testing.T) {
 	assert.Contains(t, err.Error(), "KB-1")
 }
 
+func TestSyncService_LinkDependencies_WikiLinkFormat(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+
+	tasks := []*domain.TaskFile{
+		{
+			Frontmatter: domain.Frontmatter{
+				Title:            "KB-1: First",
+				JiraNumber:       "GUARD-101",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{},
+			},
+		},
+		{
+			Frontmatter: domain.Frontmatter{
+				Title:            "KB-2: Second",
+				JiraNumber:       "GUARD-102",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"[KB-1: First](20260116-100000.md)"},
+			},
+		},
+	}
+
+	svc := NewService(nil, mockJira, nil)
+	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+
+	require.NoError(t, err)
+
+	// Verify link was created: GUARD-102 blocked by GUARD-101
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
+	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
+	assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
+
+	// Verify tasks updated to linked
+	assert.Equal(t, domain.SyncStatusLinked, tasks[0].Frontmatter.SyncStatus)
+	assert.Equal(t, domain.SyncStatusLinked, tasks[1].Frontmatter.SyncStatus)
+}
+
 func TestSyncService_UpdateModified(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()

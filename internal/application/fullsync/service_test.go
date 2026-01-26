@@ -687,3 +687,67 @@ func TestFullSyncService_PullAll(t *testing.T) {
 	assert.Equal(t, "KB-1: Updated Task 1", tasks[0].Frontmatter.Title)
 	assert.Equal(t, "In Progress", tasks[0].Frontmatter.JiraState)
 }
+
+func TestFullSyncService_PullTask_SyncsDependencies(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with a local dependency that needs to be synced to Jira
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraDependencies: []string{"KB-2"}, // Local dependency
+			LastSynced:       "2026-01-15T10:00:00Z",
+		},
+		Description: "Description",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+
+	// All tasks for mapping
+	allTasks := []*domain.TaskFile{
+		task,
+		{
+			Path: "/tasks/task2.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-2: Task 2",
+				JiraNumber: "GUARD-102",
+			},
+		},
+	}
+
+	// Mock GetIssue - no content changes
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:         "GUARD-101",
+			Summary:     "KB-1: Task 1",
+			Description: "Description",
+			Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
+		}, nil
+	}
+
+	// Mock GetIssueLinks - Jira has NO links yet
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result := svc.PullTask(context.Background(), task)
+
+	require.NoError(t, result.Error)
+
+	// PullTask should also sync dependencies when allTasks is set
+	// Since local has KB-2 as a dependency but Jira has no link,
+	// the missing link should be created in Jira
+	assert.NotNil(t, result.DependencyResult)
+	assert.True(t, result.DependencyResult.HasChanges)
+	assert.Equal(t, []string{"GUARD-102"}, result.DependencyResult.ToAdd)
+
+	// Should have created the link
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
+	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Outward)
+}
