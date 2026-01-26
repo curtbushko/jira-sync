@@ -198,6 +198,15 @@ func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) (
 	// Detect dependency changes
 	depResult := s.detector.DetectDependencyChanges(task, jiraLinks, s.allTasks)
 
+	// Update local task with Jira dependencies (pull direction)
+	// This ensures the local file reflects what's in Jira
+	if len(depResult.JiraDeps) > 0 {
+		task.Frontmatter.JiraDependencies = depResult.JiraDeps
+	} else if len(depResult.LocalDeps) == 0 {
+		// Clear local deps if Jira has none and local has none
+		task.Frontmatter.JiraDependencies = nil
+	}
+
 	if !depResult.HasChanges {
 		return &depResult, nil
 	}

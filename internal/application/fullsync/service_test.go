@@ -751,3 +751,85 @@ func TestFullSyncService_PullTask_SyncsDependencies(t *testing.T) {
 	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
 	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Outward)
 }
+
+func TestFullSyncService_PullTask_PullsJiraDependenciesToLocal(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Task with NO local dependencies
+	task := &domain.TaskFile{
+		Path: "/tasks/task1.md",
+		Frontmatter: domain.Frontmatter{
+			Title:            "KB-1: Task 1",
+			JiraNumber:       "GUARD-101",
+			JiraDependencies: nil, // No local dependencies
+			LastSynced:       "2026-01-15T10:00:00Z",
+		},
+		Description: "Description",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+
+	// All tasks for mapping
+	allTasks := []*domain.TaskFile{
+		task,
+		{
+			Path: "/tasks/task2.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-2: Task 2",
+				JiraNumber: "GUARD-102",
+			},
+		},
+		{
+			Path: "/tasks/task3.md",
+			Frontmatter: domain.Frontmatter{
+				Title:      "KB-3: Task 3",
+				JiraNumber: "GUARD-103",
+			},
+		},
+	}
+
+	// Mock GetIssue - no content changes
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:         "GUARD-101",
+			Summary:     "KB-1: Task 1",
+			Description: "Description",
+			Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
+		}, nil
+	}
+
+	// Mock GetIssueLinks - Jira HAS dependencies that local doesn't have
+	// GUARD-102 and GUARD-103 block GUARD-101
+	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
+		return []ports.IssueLink{
+			{
+				ID:           "link-1",
+				Type:         "Blocks",
+				InwardIssue:  "GUARD-102", // GUARD-102 blocks GUARD-101
+				OutwardIssue: "GUARD-101",
+			},
+			{
+				ID:           "link-2",
+				Type:         "Blocks",
+				InwardIssue:  "GUARD-103", // GUARD-103 blocks GUARD-101
+				OutwardIssue: "GUARD-101",
+			},
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher)
+	svc.SetAllTasks(allTasks)
+
+	result := svc.PullTask(context.Background(), task)
+
+	require.NoError(t, result.Error)
+
+	// The task's jira-dependencies should be updated with Jira's dependencies
+	// converted to local task IDs (KB-2, KB-3)
+	assert.ElementsMatch(t, []string{"KB-2", "KB-3"}, task.Frontmatter.JiraDependencies,
+		"Jira dependencies should be pulled to local task file")
+
+	// DependencyResult should reflect the changes
+	require.NotNil(t, result.DependencyResult)
+	assert.ElementsMatch(t, []string{"KB-2", "KB-3"}, result.DependencyResult.JiraDeps)
+}
