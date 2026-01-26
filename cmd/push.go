@@ -20,8 +20,15 @@ import (
 	"github.com/spf13/viper"
 )
 
-// syncFlags holds all the parsed flags for the sync command.
-type syncFlags struct {
+// Common Jira configuration errors.
+var (
+	errJiraURLRequired   = errors.New("jira.url is required (set JIRA_URL or use config file)")
+	errJiraUserRequired  = errors.New("jira.user is required (set JIRA_USER or use config file)")
+	errJiraTokenRequired = errors.New("JIRA_TOKEN environment variable is required")
+)
+
+// pushFlags holds all the parsed flags for the push command.
+type pushFlags struct {
 	tasksDir    string
 	project     string
 	dryRun      bool
@@ -31,8 +38,8 @@ type syncFlags struct {
 	statusOnly  bool
 }
 
-// syncContext holds all the dependencies for sync operations.
-type syncContext struct {
+// pushContext holds all the dependencies for push operations.
+type pushContext struct {
 	repo       ports.TaskRepository
 	jiraClient ports.JiraClient
 	hasher     ports.HashComputer
@@ -41,55 +48,49 @@ type syncContext struct {
 	linkType   string
 }
 
-var syncCmd = &cobra.Command{
-	Use:   "sync [tasks-dir] (default: .)",
-	Short: "Sync task files with Jira (default dir: .)",
-	Long: `Synchronize all task files with Jira.
+var pushCmd = &cobra.Command{
+	Use:   "push [tasks-dir] (default: .)",
+	Short: "Push local changes to Jira (default dir: .)",
+	Long: `Push all local task file changes to Jira.
 
-This command handles the full lifecycle:
+This command handles pushing local changes:
 - Creates tickets for 'pending' tasks
 - Links dependencies for 'created' tasks
-- Updates local files with Jira data
+- Updates Jira with modified task descriptions
 
 Arguments:
   tasks-dir   Directory containing task files (default: current directory)
 
 Example:
-  jira-sync sync --project GUARD
-  jira-sync sync ./tasks/ --project GUARD --dry-run`,
+  jira-sync push --project GUARD
+  jira-sync push ./tasks/ --project GUARD --dry-run`,
 	Args: cobra.MaximumNArgs(1),
-	RunE: runSync,
+	RunE: runPush,
 }
 
 func init() {
-	rootCmd.AddCommand(syncCmd)
+	rootCmd.AddCommand(pushCmd)
 
-	syncCmd.Flags().StringP("project", "p", "", "Jira project key (e.g., GUARD)")
-	syncCmd.Flags().Bool("dry-run", false, "Show what would happen without making changes")
-	syncCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
-	syncCmd.Flags().Bool("create-only", false, "Only create tickets, don't link dependencies")
-	syncCmd.Flags().Bool("link-only", false, "Only link dependencies, don't create tickets")
-	syncCmd.Flags().Bool("status-only", false, "Only update status from Jira")
+	pushCmd.Flags().StringP("project", "p", "", "Jira project key (e.g., GUARD)")
+	pushCmd.Flags().Bool("dry-run", false, "Show what would happen without making changes")
+	pushCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
+	pushCmd.Flags().Bool("create-only", false, "Only create tickets, don't link dependencies")
+	pushCmd.Flags().Bool("link-only", false, "Only link dependencies, don't create tickets")
+	pushCmd.Flags().Bool("status-only", false, "Only show status, don't make changes")
 
-	_ = viper.BindPFlag("defaults.project", syncCmd.Flags().Lookup("project"))
+	_ = viper.BindPFlag("defaults.project", pushCmd.Flags().Lookup("project"))
 }
 
-var (
-	errJiraURLRequired   = errors.New("jira.url is required (set JIRA_URL or use config file)")
-	errJiraUserRequired  = errors.New("jira.user is required (set JIRA_USER or use config file)")
-	errJiraTokenRequired = errors.New("JIRA_TOKEN environment variable is required")
-)
-
-func runSync(cmd *cobra.Command, args []string) error {
-	flags := parseSyncFlags(cmd, args)
+func runPush(cmd *cobra.Command, args []string) error {
+	flags := parsePushFlags(cmd, args)
 
 	repo := filesystem.NewFileTaskRepository()
-	tasks, categorized, err := loadAndCategorizeTasks(flags.tasksDir, repo)
+	tasks, categorized, err := loadAndCategorizePushTasks(flags.tasksDir, repo)
 	if err != nil {
 		return err
 	}
 
-	printSummary(tasks, categorized)
+	printPushSummary(tasks, categorized)
 
 	if flags.statusOnly {
 		color.Yellow("Status-only mode: No changes to Jira")
@@ -97,25 +98,25 @@ func runSync(cmd *cobra.Command, args []string) error {
 	}
 
 	if flags.dryRun {
-		return handleDryRun(categorized, tasks)
+		return handlePushDryRun(categorized, tasks)
 	}
 
 	if !flags.skipConfirm {
-		if !confirmSync(len(tasks)) {
+		if !confirmPush(len(tasks)) {
 			color.Yellow("Cancelled")
 			return nil
 		}
 	}
 
-	syncCtx, err := createSyncContext(repo)
+	pushCtx, err := createPushContext(repo)
 	if err != nil {
 		return err
 	}
 
-	return executeSyncPhases(cmd.Context(), flags, syncCtx, categorized, tasks)
+	return executePushPhases(cmd.Context(), flags, pushCtx, categorized, tasks)
 }
 
-func parseSyncFlags(cmd *cobra.Command, args []string) syncFlags {
+func parsePushFlags(cmd *cobra.Command, args []string) pushFlags {
 	tasksDir := "."
 	if len(args) > 0 {
 		tasksDir = args[0]
@@ -132,7 +133,7 @@ func parseSyncFlags(cmd *cobra.Command, args []string) syncFlags {
 	linkOnly, _ := cmd.Flags().GetBool("link-only")
 	statusOnly, _ := cmd.Flags().GetBool("status-only")
 
-	return syncFlags{
+	return pushFlags{
 		tasksDir:    tasksDir,
 		project:     project,
 		dryRun:      dryRun,
@@ -143,7 +144,7 @@ func parseSyncFlags(cmd *cobra.Command, args []string) syncFlags {
 	}
 }
 
-func loadAndCategorizeTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, *sync.CategorizedTasks, error) {
+func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, *sync.CategorizedTasks, error) {
 	color.Cyan("Scanning %s...\n", tasksDir)
 
 	tasks, err := repo.ListTasks(tasksDir)
@@ -158,7 +159,7 @@ func loadAndCategorizeTasks(tasksDir string, repo ports.TaskRepository) ([]*doma
 	return tasks, categorized, nil
 }
 
-func printSummary(tasks []*domain.TaskFile, categorized *sync.CategorizedTasks) {
+func printPushSummary(tasks []*domain.TaskFile, categorized *sync.CategorizedTasks) {
 	fmt.Printf("Found %d task files:\n", len(tasks))
 	fmt.Printf("  - %d pending (will create tickets)\n", len(categorized.Pending))
 	fmt.Printf("  - %d created (will link dependencies)\n", len(categorized.Created))
@@ -167,16 +168,16 @@ func printSummary(tasks []*domain.TaskFile, categorized *sync.CategorizedTasks) 
 	fmt.Println()
 }
 
-func handleDryRun(categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+func handlePushDryRun(categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
 	color.Yellow("Dry run - no changes will be made")
-	showPendingTickets(categorized.Pending)
-	showDependenciesToLink(categorized.Created, tasks)
-	showModifiedTickets(categorized.NeedsUpdate)
+	showPushPendingTickets(categorized.Pending)
+	showPushDependenciesToLink(categorized.Created, tasks)
+	showPushModifiedTickets(categorized.NeedsUpdate)
 	return nil
 }
 
-func confirmSync(taskCount int) bool {
-	fmt.Printf("Sync %d tasks with Jira? [y/N] ", taskCount)
+func confirmPush(taskCount int) bool {
+	fmt.Printf("Push %d tasks to Jira? [y/N] ", taskCount)
 	reader := bufio.NewReader(os.Stdin)
 	response, err := reader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -186,7 +187,7 @@ func confirmSync(taskCount int) bool {
 	return response == "y" || response == "Y"
 }
 
-func createSyncContext(repo ports.TaskRepository) (*syncContext, error) {
+func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 	jiraURL := viper.GetString("jira.url")
 	jiraUser := viper.GetString("jira.user")
 	jiraToken := viper.GetString("token")
@@ -219,7 +220,7 @@ func createSyncContext(repo ports.TaskRepository) (*syncContext, error) {
 		linkType = domain.DefaultLinkType
 	}
 
-	return &syncContext{
+	return &pushContext{
 		repo:       repo,
 		jiraClient: jiraClient,
 		hasher:     hasher,
@@ -229,71 +230,71 @@ func createSyncContext(repo ports.TaskRepository) (*syncContext, error) {
 	}, nil
 }
 
-func executeSyncPhases(ctx context.Context, flags syncFlags, syncCtx *syncContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
-	if err := executeCreatePhase(ctx, flags, syncCtx, categorized); err != nil {
+func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+	if err := executePushCreatePhase(ctx, flags, pushCtx, categorized); err != nil {
 		return err
 	}
 
-	if err := executeLinkPhase(ctx, flags, syncCtx, categorized, tasks); err != nil {
+	if err := executePushLinkPhase(ctx, flags, pushCtx, categorized, tasks); err != nil {
 		return err
 	}
 
-	if err := executeUpdatePhase(ctx, syncCtx, categorized); err != nil {
+	if err := executePushUpdatePhase(ctx, pushCtx, categorized); err != nil {
 		return err
 	}
 
-	color.Green("\n✓ Sync complete")
+	color.Green("\n[OK] Push complete")
 	return nil
 }
 
-func executeCreatePhase(ctx context.Context, flags syncFlags, syncCtx *syncContext, categorized *sync.CategorizedTasks) error {
+func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks) error {
 	if flags.linkOnly || len(categorized.Pending) == 0 {
 		return nil
 	}
 
 	color.Cyan("\nCreating tickets...\n")
-	if err := syncCtx.service.CreateTickets(ctx, categorized.Pending, flags.project, syncCtx.issueType); err != nil {
+	if err := pushCtx.service.CreateTickets(ctx, categorized.Pending, flags.project, pushCtx.issueType); err != nil {
 		return fmt.Errorf("create tickets: %w", err)
 	}
 
 	for _, task := range categorized.Pending {
-		if err := syncCtx.repo.WriteTask(task); err != nil {
+		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
-		color.Green("✓ %s → %s", task.TaskID(), task.Frontmatter.JiraNumber)
+		color.Green("[OK] %s -> %s", task.TaskID(), task.Frontmatter.JiraNumber)
 	}
 
 	categorized.Created = append(categorized.Created, categorized.Pending...)
 	return nil
 }
 
-func executeLinkPhase(ctx context.Context, flags syncFlags, syncCtx *syncContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if flags.createOnly || len(categorized.Created) == 0 {
 		return nil
 	}
 
 	color.Cyan("\nLinking dependencies...\n")
-	if err := syncCtx.service.LinkDependencies(ctx, categorized.Created, syncCtx.linkType); err != nil {
+	if err := pushCtx.service.LinkDependencies(ctx, categorized.Created, pushCtx.linkType); err != nil {
 		return fmt.Errorf("link dependencies: %w", err)
 	}
 
-	return saveLinkedTasks(syncCtx, categorized.Created, tasks)
+	return savePushLinkedTasks(pushCtx, categorized.Created, tasks)
 }
 
-func saveLinkedTasks(syncCtx *syncContext, created []*domain.TaskFile, allTasks []*domain.TaskFile) error {
-	taskMap := buildTaskMap(allTasks)
+func savePushLinkedTasks(pushCtx *pushContext, created []*domain.TaskFile, allTasks []*domain.TaskFile) error {
+	taskMap := buildPushTaskMap(allTasks)
 
 	for _, task := range created {
-		task.Frontmatter.ContentHash = syncCtx.hasher.ComputeHash(task)
-		if err := syncCtx.repo.WriteTask(task); err != nil {
+		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
+		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
-		printLinkedDependencies(task, taskMap)
+		printPushLinkedDependencies(task, taskMap)
 	}
 	return nil
 }
 
-func buildTaskMap(tasks []*domain.TaskFile) map[string]*domain.TaskFile {
+func buildPushTaskMap(tasks []*domain.TaskFile) map[string]*domain.TaskFile {
 	taskMap := make(map[string]*domain.TaskFile, len(tasks))
 	for _, task := range tasks {
 		taskMap[task.TaskID()] = task
@@ -301,34 +302,34 @@ func buildTaskMap(tasks []*domain.TaskFile) map[string]*domain.TaskFile {
 	return taskMap
 }
 
-func printLinkedDependencies(task *domain.TaskFile, taskMap map[string]*domain.TaskFile) {
+func printPushLinkedDependencies(task *domain.TaskFile, taskMap map[string]*domain.TaskFile) {
 	for _, dep := range task.Frontmatter.JiraDependencies {
 		if depTask, ok := taskMap[dep]; ok {
-			color.Green("✓ %s blocked by %s", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)
+			color.Green("[OK] %s blocked by %s", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)
 		}
 	}
 }
 
-func executeUpdatePhase(ctx context.Context, syncCtx *syncContext, categorized *sync.CategorizedTasks) error {
+func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *sync.CategorizedTasks) error {
 	if len(categorized.NeedsUpdate) == 0 {
 		return nil
 	}
 
 	color.Cyan("\nUpdating modified tickets...\n")
-	if err := syncCtx.service.UpdateModified(ctx, categorized.NeedsUpdate); err != nil {
+	if err := pushCtx.service.UpdateModified(ctx, categorized.NeedsUpdate); err != nil {
 		return fmt.Errorf("update tickets: %w", err)
 	}
 
 	for _, task := range categorized.NeedsUpdate {
-		if err := syncCtx.repo.WriteTask(task); err != nil {
+		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
-		color.Green("✓ Updated %s", task.Frontmatter.JiraNumber)
+		color.Green("[OK] Updated %s", task.Frontmatter.JiraNumber)
 	}
 	return nil
 }
 
-func showPendingTickets(pending []*domain.TaskFile) {
+func showPushPendingTickets(pending []*domain.TaskFile) {
 	if len(pending) == 0 {
 		return
 	}
@@ -338,7 +339,7 @@ func showPendingTickets(pending []*domain.TaskFile) {
 	}
 }
 
-func showDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.TaskFile) {
+func showPushDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.TaskFile) {
 	idMap := make(map[string]*domain.TaskFile, len(allTasks))
 	for _, task := range allTasks {
 		idMap[task.TaskID()] = task
@@ -353,11 +354,11 @@ func showDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.TaskF
 			fmt.Println("\nJira-dependencies to link:")
 			hasLinks = true
 		}
-		printDependencyLinks(task, idMap)
+		printPushDependencyLinks(task, idMap)
 	}
 }
 
-func printDependencyLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFile) {
+func printPushDependencyLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFile) {
 	for _, depID := range task.Frontmatter.JiraDependencies {
 		depTask := idMap[depID]
 		if depTask != nil && depTask.Frontmatter.JiraNumber != "" {
@@ -368,7 +369,7 @@ func printDependencyLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFi
 	}
 }
 
-func showModifiedTickets(modified []*domain.TaskFile) {
+func showPushModifiedTickets(modified []*domain.TaskFile) {
 	if len(modified) == 0 {
 		return
 	}

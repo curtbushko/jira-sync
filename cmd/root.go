@@ -17,12 +17,13 @@ var rootCmd = &cobra.Command{
 	Short: "Sync markdown task files with Jira",
 	Long: `jira-sync manages Jira tickets from local markdown files.
 
-It supports batch creation, dependency linking, and two-way sync
+It supports batch creation, dependency linking, and bidirectional sync
 between local task files and Jira issues.
 
 Commands:
   create    Create a new task file
-  sync      Sync task files with Jira`,
+  push      Push local changes to Jira
+  pull      Pull Jira changes to local files`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

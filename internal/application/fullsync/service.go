@@ -12,6 +12,42 @@ import (
 // LinkTypeBlocks is the Jira link type for blocking relationships.
 const LinkTypeBlocks = "Blocks"
 
+// PullAction represents the action taken during a pull operation.
+type PullAction string
+
+const (
+	// PullActionUpdated indicates the task was updated from Jira.
+	PullActionUpdated PullAction = "updated"
+	// PullActionSkipped indicates no changes were needed.
+	PullActionSkipped PullAction = "skipped"
+	// PullActionConflict indicates both local and Jira changed.
+	PullActionConflict PullAction = "conflict"
+	// PullActionError indicates an error occurred.
+	PullActionError PullAction = "error"
+)
+
+// PullResult contains the result of pulling a task from Jira.
+type PullResult struct {
+	Task   *domain.TaskFile
+	Action PullAction
+	Fields []string
+	Error  error
+}
+
+// PullOption configures pull behavior.
+type PullOption func(*pullOptions)
+
+type pullOptions struct {
+	force bool
+}
+
+// WithForce sets the force option to overwrite local changes.
+func WithForce(force bool) PullOption {
+	return func(o *pullOptions) {
+		o.force = force
+	}
+}
+
 // SyncResult represents the result of syncing a single task.
 type SyncResult struct {
 	Task             *domain.TaskFile
@@ -190,4 +226,76 @@ func (s *Service) SyncDependenciesOnly(ctx context.Context, task *domain.TaskFil
 		return nil, nil
 	}
 	return s.syncDependencies(ctx, task)
+}
+
+// PullTask pulls Jira changes to a local task file.
+// Returns a PullResult indicating what action was taken.
+func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile, opts ...PullOption) *PullResult {
+	options := &pullOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
+	// Skip tasks without Jira number
+	if task.Frontmatter.JiraNumber == "" {
+		return &PullResult{Task: task, Action: PullActionSkipped}
+	}
+
+	// Get current Jira issue
+	jiraIssue, err := s.jira.GetIssue(ctx, task.Frontmatter.JiraNumber)
+	if err != nil {
+		return &PullResult{Task: task, Action: PullActionError, Error: err}
+	}
+
+	// Detect changes
+	changeResult := s.detector.Detect(task, jiraIssue)
+
+	// Handle based on change type
+	switch changeResult.Type {
+	case ChangeTypeJiraToLocal:
+		// Pull Jira changes to local
+		s.pullFromJira(task, jiraIssue)
+		s.updateLastSynced(task)
+		return &PullResult{
+			Task:   task,
+			Action: PullActionUpdated,
+			Fields: changeResult.Fields,
+		}
+
+	case ChangeTypeConflict:
+		if options.force {
+			// Force overwrite local with Jira
+			s.pullFromJira(task, jiraIssue)
+			s.updateLastSynced(task)
+			return &PullResult{
+				Task:   task,
+				Action: PullActionUpdated,
+				Fields: changeResult.Fields,
+			}
+		}
+		return &PullResult{
+			Task:   task,
+			Action: PullActionConflict,
+			Fields: changeResult.Fields,
+		}
+
+	case ChangeTypeLocalToJira, ChangeTypeNone:
+		// No Jira changes to pull
+		return &PullResult{Task: task, Action: PullActionSkipped}
+	}
+
+	return &PullResult{Task: task, Action: PullActionSkipped}
+}
+
+// PullAll pulls Jira changes to all tasks.
+// Returns a slice of PullResults, one for each task.
+func (s *Service) PullAll(ctx context.Context, tasks []*domain.TaskFile, opts ...PullOption) []*PullResult {
+	results := make([]*PullResult, 0, len(tasks))
+
+	for _, task := range tasks {
+		result := s.PullTask(ctx, task, opts...)
+		results = append(results, result)
+	}
+
+	return results
 }

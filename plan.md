@@ -6342,3 +6342,142 @@ Execute tasks in this order to maintain TDD discipline:
 - [ ] 15.11 Documentation updates
 - [ ] 15.12 Integration testing
 
+
+---
+
+## Phase 17: Replace sync Command with Separate push and pull Commands
+
+### Overview
+
+Replace the current one-way `sync` command with two separate commands:
+- `push` - Push local changes to Jira (create tickets, link dependencies, update modified)
+- `pull` - Pull Jira changes to local files (state, title, description)
+
+### Files to Modify
+
+#### Remove
+- `cmd/sync.go` - Delete entirely
+
+#### Create
+- `cmd/push.go` - New push command (based on sync.go structure)
+- `cmd/pull.go` - New pull command (using fullsync service)
+
+#### Modify
+- `internal/application/fullsync/service.go` - Add pull-only method
+
+### Implementation Details
+
+#### 1. Create `cmd/push.go`
+
+Structure based on existing sync.go patterns:
+
+```go
+// pushFlags holds the parsed command flags
+type pushFlags struct {
+    tasksDir    string
+    project     string
+    dryRun      bool
+    skipConfirm bool
+    createOnly  bool
+    linkOnly    bool
+    statusOnly  bool
+}
+```
+
+**Behavior:**
+- Reuse sync.go's three-phase execution: Create → Link → Update
+- Keep all existing flags: `--dry-run`, `-y/--yes`, `--create-only`, `--link-only`, `--status-only`
+- Uses `sync.Service` for push operations
+
+#### 2. Create `cmd/pull.go`
+
+```go
+// pullFlags holds the parsed command flags
+type pullFlags struct {
+    tasksDir    string
+    project     string
+    dryRun      bool
+    skipConfirm bool
+    force       bool  // Force overwrite even if local changes detected
+}
+```
+
+**Behavior:**
+- Load all tasks with JiraNumber set (created or linked status)
+- For each task, fetch Jira issue and detect changes
+- If Jira changed (and local didn't), update local file with:
+  - `jira-state` from Jira status
+  - Title from Jira summary
+  - Description from Jira description
+- Handle conflicts: warn user if both local and Jira changed
+- `--force` flag to overwrite local with Jira even on conflict
+
+Uses `fullsync.Service` with a new `PullAll()` method.
+
+#### 3. Modify `internal/application/fullsync/service.go`
+
+Add a dedicated pull method:
+
+```go
+// PullResult contains the result of pulling a task from Jira
+type PullResult struct {
+    Task      *domain.TaskFile
+    Action    string  // "updated", "skipped", "conflict", "error"
+    Fields    []string
+    Error     error
+}
+
+// PullTask pulls Jira changes to a local task file
+func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile) *PullResult
+
+// PullAll pulls all tasks from Jira to local
+func (s *Service) PullAll(ctx context.Context, tasks []*domain.TaskFile) []*PullResult
+```
+
+#### 4. Delete `cmd/sync.go`
+
+Remove the file entirely.
+
+### Command Usage
+
+```bash
+# Push local changes to Jira
+jira-sync push ./tasks
+jira-sync push ./tasks --dry-run
+jira-sync push ./tasks -y  # Skip confirmation
+jira-sync push ./tasks --create-only
+jira-sync push ./tasks --link-only
+
+# Pull Jira changes to local
+jira-sync pull ./tasks
+jira-sync pull ./tasks --dry-run
+jira-sync pull ./tasks -y  # Skip confirmation
+jira-sync pull ./tasks --force  # Overwrite local on conflict
+```
+
+### Task Breakdown
+
+- [ ] 17.1 Create `cmd/push.go` with push command (copy structure from sync.go) - RED/GREEN/REFACTOR
+- [ ] 17.2 Create `cmd/pull.go` with pull command - RED/GREEN/REFACTOR
+- [ ] 17.3 Add `PullTask` and `PullAll` methods to fullsync service - RED/GREEN/REFACTOR
+- [ ] 17.4 Delete `cmd/sync.go`
+- [ ] 17.5 Update tests for new commands - RED/GREEN/REFACTOR
+- [ ] 17.6 Run all tests to verify
+
+### Verification
+
+1. Run `go build` to verify compilation
+2. Run `go test ./...` to verify all tests pass
+3. Test push command: `jira-sync push ./tasks --dry-run`
+4. Test pull command: `jira-sync pull ./tasks --dry-run`
+5. Verify help output: `jira-sync --help` shows push/pull, not sync
+
+### Acceptance Criteria
+
+- [ ] `jira-sync push` creates tickets, links dependencies, updates modified (same as old sync)
+- [ ] `jira-sync pull` fetches Jira state changes and updates local files
+- [ ] `jira-sync pull --force` overwrites local even on conflict
+- [ ] `jira-sync sync` no longer exists
+- [ ] All new code has unit tests
+- [ ] `go test ./...` passes
+- [ ] `golangci-lint run` passes
