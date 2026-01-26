@@ -34,6 +34,7 @@ func TestExport_BasicIssue(t *testing.T) {
 		Summary:     "Test Issue Title",
 		Description: "This is a test description",
 		Status:      "To Do",
+		IssueType:   "Story",
 		Parent:      "TEST-100",
 		Created:     "2026-01-15T14:30:45.000+0000",
 	})
@@ -54,9 +55,33 @@ func TestExport_BasicIssue(t *testing.T) {
 	assert.Equal(t, "Test Issue Title", result.Task.Frontmatter.Title)
 	assert.Equal(t, "This is a test description", result.Task.Description)
 	assert.Equal(t, "To Do", result.Task.Frontmatter.JiraState)
+	assert.Equal(t, "Story", result.Task.Frontmatter.JiraType)
 	assert.Equal(t, "TEST-100", result.Task.Frontmatter.JiraParent)
 	assert.Equal(t, "https://jira.example.com/browse/TEST-123", result.Task.Frontmatter.JiraURL)
 	assert.Equal(t, domain.SyncStatusLinked, result.Task.Frontmatter.SyncStatus)
+}
+
+func TestExport_EpicIssueType(t *testing.T) {
+	// Arrange
+	mockJira := jira.NewMockJiraClient()
+	mockJira.AddStoredIssue(&ports.IssueWithLinks{
+		Key:       "TEST-1",
+		URL:       "https://jira.example.com/browse/TEST-1",
+		Project:   "TEST",
+		Summary:   "My Epic",
+		IssueType: "Epic",
+		Created:   "2026-01-15T14:30:45.000+0000",
+	})
+
+	svc := NewService(mockJira, &mockHashComputer{}, nil)
+
+	// Act
+	result, err := svc.Export(context.Background(), "TEST-1", Options{})
+
+	// Assert
+	require.NoError(t, err)
+	assert.Equal(t, "Epic", result.Task.Frontmatter.JiraType)
+	assert.Empty(t, result.Task.Frontmatter.JiraParent) // Epics have no parent
 }
 
 func TestExport_FilenameFromCreationDate(t *testing.T) {

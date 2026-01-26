@@ -74,7 +74,8 @@ func (p *Parser) validate(fm *domain.Frontmatter) error {
 	if fm.Title == "" {
 		return domain.NewValidationError("title", "is required")
 	}
-	if fm.JiraParent == "" {
+	// jira-parent is required for all types except Epic
+	if fm.JiraParent == "" && !strings.EqualFold(fm.JiraType, "Epic") {
 		return domain.NewValidationError("jira-parent", "is required")
 	}
 	return nil

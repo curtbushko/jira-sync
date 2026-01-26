@@ -75,7 +75,7 @@ func TestConfig_Defaults(t *testing.T) {
 
 	require.NoError(t, err)
 	// Check defaults are applied
-	assert.Equal(t, "Task", cfg.Defaults.IssueType)
+	assert.Equal(t, "Story", cfg.Defaults.IssueType)
 	assert.Equal(t, 7, cfg.Defaults.EndDateOffset)
 	assert.Equal(t, "Blocks", cfg.LinkTypes.Dependency)
 }

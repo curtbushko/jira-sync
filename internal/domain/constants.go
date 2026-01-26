@@ -11,7 +11,7 @@ const (
 const DefaultLinkType = "Blocks"
 
 // DefaultIssueType is the default Jira issue type.
-const DefaultIssueType = "Task"
+const DefaultIssueType = "Story"
 
 // DefaultEndDateOffset is the default number of days to add for end date calculation.
 const DefaultEndDateOffset = 7

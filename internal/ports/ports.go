@@ -42,6 +42,7 @@ type IssueWithLinks struct {
 	Summary     string
 	Description string
 	Status      string
+	IssueType   string      // Issue type (e.g., "Story", "Task", "Epic", "Bug")
 	Parent      string      // Parent issue key (e.g., "PROJ-100"), empty if no parent
 	Created     string      // Issue creation datetime in Jira format
 	StartDate   string      // Start date field (may be empty)

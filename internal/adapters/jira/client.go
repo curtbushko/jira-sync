@@ -298,6 +298,10 @@ func populateIssueFields(result *ports.IssueWithLinks, issue *jira.Issue) {
 		result.Status = issue.Fields.Status.Name
 	}
 
+	if issue.Fields.Type.Name != "" {
+		result.IssueType = issue.Fields.Type.Name
+	}
+
 	if issue.Fields.Project.Key != "" {
 		result.Project = issue.Fields.Project.Key
 	}

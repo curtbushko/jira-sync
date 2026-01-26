@@ -106,7 +106,7 @@ func buildConfig(viperInstance *viper.Viper) (*Config, error) {
 
 	// Apply defaults
 	if cfg.Defaults.IssueType == "" {
-		cfg.Defaults.IssueType = "Task"
+		cfg.Defaults.IssueType = "Story"
 	}
 	if cfg.Defaults.EndDateOffset == 0 {
 		cfg.Defaults.EndDateOffset = 7

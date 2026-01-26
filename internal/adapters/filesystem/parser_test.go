@@ -158,6 +158,7 @@ Description`
 func TestParser_Parse_MissingJiraParent(t *testing.T) {
 	content := `---
 title: "KB-1: Test"
+jira-type: Story
 sync-status: pending
 jira-parent: ""
 sync-dependencies: []
@@ -172,6 +173,48 @@ Description`
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "jira-parent")
+}
+
+func TestParser_Parse_EpicWithoutParent(t *testing.T) {
+	// Epics are top-level items and don't require a parent
+	content := `---
+title: "EPIC-1: My Epic"
+jira-type: Epic
+sync-status: pending
+jira-parent: ""
+sync-dependencies: []
+jira-dependencies: []
+content-hash: ""
+---
+
+Epic description`
+
+	parser := NewParser()
+	task, err := parser.Parse("test.md", content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "EPIC-1: My Epic", task.Frontmatter.Title)
+	assert.Equal(t, "Epic", task.Frontmatter.JiraType)
+	assert.Equal(t, "", task.Frontmatter.JiraParent)
+}
+
+func TestParser_Parse_EpicWithoutParentCaseInsensitive(t *testing.T) {
+	// Test case-insensitive Epic detection
+	content := `---
+title: "EPIC-1: My Epic"
+jira-type: epic
+sync-status: pending
+jira-parent: ""
+---
+
+Epic description`
+
+	parser := NewParser()
+	task, err := parser.Parse("test.md", content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "epic", task.Frontmatter.JiraType)
+	assert.Equal(t, "", task.Frontmatter.JiraParent)
 }
 
 func TestParser_Parse_EmptyDescription(t *testing.T) {
