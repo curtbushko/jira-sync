@@ -65,8 +65,6 @@ func TestTaskRepository_WriteTask(t *testing.T) {
 			JiraProject:      "GUARD",
 			JiraState:        "Todo",
 			CreatedDate:      "2026-01-16",
-			JiraStartDate:    "",
-			JiraEndDate:      "",
 			JiraURL:          "",
 			SyncStatus:       "pending",
 			JiraParent:       "GUARD-100",
@@ -232,8 +230,6 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 			JiraProject:      "GUARD",
 			JiraState:        "In Progress",
 			CreatedDate:      "2026-01-16",
-			JiraStartDate:    "2026-01-16",
-			JiraEndDate:      "2026-01-23",
 			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
 			SyncStatus:       "linked",
 			JiraParent:       "GUARD-100",
@@ -265,8 +261,6 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.JiraProject, loaded.Frontmatter.JiraProject)
 	assert.Equal(t, original.Frontmatter.JiraState, loaded.Frontmatter.JiraState)
 	assert.Equal(t, original.Frontmatter.CreatedDate, loaded.Frontmatter.CreatedDate)
-	assert.Equal(t, original.Frontmatter.JiraStartDate, loaded.Frontmatter.JiraStartDate)
-	assert.Equal(t, original.Frontmatter.JiraEndDate, loaded.Frontmatter.JiraEndDate)
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
 	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)

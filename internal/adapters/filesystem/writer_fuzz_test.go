@@ -12,40 +12,40 @@ import (
 func FuzzWriter_Marshal(f *testing.F) {
 	// Add seed values for various fields
 	seeds := []struct {
-		title, jiraNumber, createdDate, startDate, endDate string
-		jiraURL, syncStatus, parent, contentHash           string
-		description                                        string
+		title, jiraNumber, createdDate string
+		jiraURL, syncStatus, parent, contentHash string
+		description                              string
 	}{
 		// Normal case
-		{"KB-1: Test", "GUARD-101", "2026-01-16", "2026-01-16", "2026-01-23",
+		{"KB-1: Test", "GUARD-101", "2026-01-16",
 			"https://test.atlassian.net/browse/GUARD-101", "pending", "GUARD-100", "abc123",
 			"Description here"},
 		// Empty fields
-		{"Test", "", "", "", "", "", "", "GUARD-100", "", ""},
+		{"Test", "", "", "", "", "GUARD-100", "", ""},
 		// Special characters
-		{"KB-1: Test with \"quotes\" and 'apostrophes'", "", "", "", "",
+		{"KB-1: Test with \"quotes\" and 'apostrophes'", "", "",
 			"", "pending", "GUARD-100", "",
 			"Description with\nNewlines\nand\ttabs"},
 		// Unicode
-		{"KB-1: Test 日本語 émoji 🎉", "", "", "", "",
+		{"KB-1: Test 日本語 émoji 🎉", "", "",
 			"", "pending", "親タスク", "",
 			"Description with émojis 🚀 and 日本語"},
 		// Long strings
-		{"KB-1: " + string(make([]byte, 500)), "", "", "", "",
+		{"KB-1: " + string(make([]byte, 500)), "", "",
 			"", "pending", "GUARD-100", "",
 			string(make([]byte, 5000))},
 		// YAML special characters
-		{"KB-1: Test: with: colons", "", "", "", "",
+		{"KB-1: Test: with: colons", "", "",
 			"", "pending", "GUARD-100", "",
 			"Key: value\nList:\n  - item1\n  - item2"},
 		// Multi-line description
-		{"KB-1: Test", "GUARD-101", "", "", "",
+		{"KB-1: Test", "GUARD-101", "",
 			"", "linked", "GUARD-100", "",
 			"# Header\n\nParagraph 1.\n\nParagraph 2.\n\n- Item 1\n- Item 2"},
 	}
 
 	for _, s := range seeds {
-		f.Add(s.title, s.jiraNumber, s.createdDate, s.startDate, s.endDate,
+		f.Add(s.title, s.jiraNumber, s.createdDate,
 			s.jiraURL, s.syncStatus, s.parent, s.contentHash, s.description)
 	}
 
@@ -53,22 +53,20 @@ func FuzzWriter_Marshal(f *testing.F) {
 	parser := NewParser()
 
 	f.Fuzz(func(t *testing.T,
-		title, jiraNumber, createdDate, startDate, endDate string,
+		title, jiraNumber, createdDate string,
 		jiraURL, syncStatus, parent, contentHash string,
 		description string,
 	) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        title,
-				JiraNumber:   jiraNumber,
-				CreatedDate:  createdDate,
-				JiraStartDate: startDate,
-				JiraEndDate:   endDate,
-				JiraURL:      jiraURL,
-				SyncStatus:   syncStatus,
+				Title:            title,
+				JiraNumber:       jiraNumber,
+				CreatedDate:      createdDate,
+				JiraURL:          jiraURL,
+				SyncStatus:       syncStatus,
 				JiraParent:       parent,
-				ContentHash:  contentHash,
+				ContentHash:      contentHash,
 				JiraDependencies: []string{}, // Start with empty deps
 			},
 			Description: description,
@@ -122,8 +120,8 @@ func FuzzWriter_MarshalWithDependencies(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-1: Test",
-				SyncStatus:   "pending",
+				Title:            "KB-1: Test",
+				SyncStatus:       "pending",
 				JiraParent:       "GUARD-100",
 				JiraDependencies: deps,
 			},

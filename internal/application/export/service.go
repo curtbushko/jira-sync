@@ -84,8 +84,6 @@ func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*R
 			JiraType:         issue.IssueType,
 			JiraState:        issue.Status,
 			CreatedDate:      createdTime.Format("2006-01-02"),
-			JiraStartDate:    issue.StartDate,
-			JiraEndDate:      issue.EndDate,
 			JiraURL:          issue.URL,
 			SyncStatus:       domain.SyncStatusLinked,
 			JiraParent:       parent,

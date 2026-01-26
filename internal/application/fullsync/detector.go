@@ -112,16 +112,6 @@ func (d *ChangeDetector) compareJiraFields(task *domain.TaskFile, jiraIssue *por
 		changedFields = append(changedFields, "status")
 	}
 
-	// Check start date
-	if jiraIssue.JiraStartDate != task.Frontmatter.JiraStartDate {
-		changedFields = append(changedFields, "jira-start-date")
-	}
-
-	// Check end date
-	if jiraIssue.JiraEndDate != task.Frontmatter.JiraEndDate {
-		changedFields = append(changedFields, "jira-end-date")
-	}
-
 	return changedFields
 }
 
@@ -137,16 +127,6 @@ func (d *ChangeDetector) getLocalChangedFields(task *domain.TaskFile, jiraIssue 
 	// Check description
 	if jiraIssue.Description != task.Description {
 		changedFields = append(changedFields, "description")
-	}
-
-	// Check start date
-	if jiraIssue.JiraStartDate != task.Frontmatter.JiraStartDate {
-		changedFields = append(changedFields, "jira-start-date")
-	}
-
-	// Check end date
-	if jiraIssue.JiraEndDate != task.Frontmatter.JiraEndDate {
-		changedFields = append(changedFields, "jira-end-date")
 	}
 
 	return changedFields

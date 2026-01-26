@@ -23,9 +23,7 @@ type Frontmatter struct {
 	JiraProject      string   `yaml:"jira-project"`
 	JiraType         string   `yaml:"jira-type"`
 	JiraState        string   `yaml:"jira-state"`
-	CreatedDate   string `yaml:"created-date"`
-	JiraStartDate string `yaml:"jira-start-date"`
-	JiraEndDate   string `yaml:"jira-end-date"`
+	CreatedDate      string   `yaml:"created-date"`
 	JiraURL          string   `yaml:"jira-url"`
 	SyncStatus       string   `yaml:"sync-status"`
 	JiraParent       string   `yaml:"jira-parent"`

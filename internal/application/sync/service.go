@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
@@ -90,8 +89,6 @@ func (s *Service) needsResync(task *domain.TaskFile) bool {
 // Uses task's jira-project if set, otherwise falls back to defaultProject.
 // Uses task's jira-type if set, otherwise falls back to defaultIssueType.
 func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, defaultProject, defaultIssueType string) error {
-	now := time.Now()
-
 	for _, task := range tasks {
 		// Use task's jira-project if set, otherwise use default
 		project := task.Frontmatter.JiraProject
@@ -130,8 +127,6 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 		task.Frontmatter.JiraNumber = issue.Key
 		task.Frontmatter.JiraURL = s.jira.BaseURL() + "/browse/" + issue.Key
 		task.Frontmatter.SyncStatus = domain.SyncStatusCreated
-		task.Frontmatter.JiraStartDate = now.Format("2006-01-02")
-		task.Frontmatter.JiraEndDate = now.AddDate(0, 0, 7).Format("2006-01-02")
 	}
 
 	return nil

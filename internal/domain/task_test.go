@@ -404,39 +404,3 @@ func TestIsEpic_True(t *testing.T) {
 	}
 }
 
-// Phase 16: Jira Date Fields Tests
-
-func TestFrontmatter_JiraStartDate(t *testing.T) {
-	task := &TaskFile{
-		Frontmatter: Frontmatter{
-			Title:         "KB-1: Test Task",
-			JiraStartDate: "2026-01-16",
-		},
-	}
-
-	assert.Equal(t, "2026-01-16", task.Frontmatter.JiraStartDate)
-}
-
-func TestFrontmatter_JiraEndDate(t *testing.T) {
-	task := &TaskFile{
-		Frontmatter: Frontmatter{
-			Title:       "KB-1: Test Task",
-			JiraEndDate: "2026-01-23",
-		},
-	}
-
-	assert.Equal(t, "2026-01-23", task.Frontmatter.JiraEndDate)
-}
-
-func TestFrontmatter_JiraDateFieldsEmpty(t *testing.T) {
-	task := &TaskFile{
-		Frontmatter: Frontmatter{
-			Title:         "KB-1: Test Task",
-			JiraStartDate: "",
-			JiraEndDate:   "",
-		},
-	}
-
-	assert.Empty(t, task.Frontmatter.JiraStartDate)
-	assert.Empty(t, task.Frontmatter.JiraEndDate)
-}

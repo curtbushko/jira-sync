@@ -25,14 +25,12 @@ type TaskRepository interface {
 
 // Issue represents a Jira issue.
 type Issue struct {
-	Key           string
-	Self          string // URL to the issue
-	Summary       string
-	Description   string
-	Status        string
-	Updated       time.Time // Last updated timestamp from Jira
-	JiraStartDate string    // Start date custom field (may be empty)
-	JiraEndDate   string    // End date custom field (may be empty)
+	Key         string
+	Self        string // URL to the issue
+	Summary     string
+	Description string
+	Status      string
+	Updated     time.Time // Last updated timestamp from Jira
 }
 
 // IssueWithLinks represents a Jira issue with expanded link information.
@@ -63,10 +61,8 @@ type CreateIssueRequest struct {
 
 // UpdateIssueRequest contains the data needed to update a Jira issue.
 type UpdateIssueRequest struct {
-	Summary       string
-	Description   string
-	JiraStartDate string // Start date custom field (empty = don't update)
-	JiraEndDate   string // End date custom field (empty = don't update)
+	Summary     string
+	Description string
 }
 
 // Transition represents a Jira workflow transition.
