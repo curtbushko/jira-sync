@@ -17,9 +17,10 @@ var (
 
 // Config holds all configuration for jira-sync.
 type Config struct {
-	Jira      JiraConfig
-	Defaults  DefaultsConfig
-	LinkTypes LinkTypesConfig
+	Jira         JiraConfig
+	Defaults     DefaultsConfig
+	LinkTypes    LinkTypesConfig
+	CustomFields CustomFieldsConfig
 }
 
 // JiraConfig holds Jira connection settings.
@@ -39,6 +40,12 @@ type DefaultsConfig struct {
 // LinkTypesConfig holds Jira link type names.
 type LinkTypesConfig struct {
 	Dependency string // e.g., "Blocks"
+}
+
+// CustomFieldsConfig holds Jira custom field IDs for date fields.
+type CustomFieldsConfig struct {
+	StartDate string // Jira custom field ID for start date (e.g., "customfield_10015")
+	EndDate   string // Jira custom field ID for end date (e.g., "customfield_10016")
 }
 
 // LoadFromFile loads configuration from a specific file path.
@@ -84,6 +91,8 @@ func setupEnvVars(viperInstance *viper.Viper) {
 	_ = viperInstance.BindEnv("defaults.issue_type", "JIRA_DEFAULTS_ISSUE_TYPE")
 	_ = viperInstance.BindEnv("defaults.end_date_offset", "JIRA_DEFAULTS_END_DATE_OFFSET")
 	_ = viperInstance.BindEnv("link_types.dependency", "JIRA_LINK_TYPES_DEPENDENCY")
+	_ = viperInstance.BindEnv("custom_fields.start_date", "JIRA_CUSTOM_FIELDS_START_DATE")
+	_ = viperInstance.BindEnv("custom_fields.end_date", "JIRA_CUSTOM_FIELDS_END_DATE")
 }
 
 // buildConfig creates a Config from Viper values.
@@ -101,6 +110,10 @@ func buildConfig(viperInstance *viper.Viper) (*Config, error) {
 		},
 		LinkTypes: LinkTypesConfig{
 			Dependency: viperInstance.GetString("link_types.dependency"),
+		},
+		CustomFields: CustomFieldsConfig{
+			StartDate: viperInstance.GetString("custom_fields.start_date"),
+			EndDate:   viperInstance.GetString("custom_fields.end_date"),
 		},
 	}
 

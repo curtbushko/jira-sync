@@ -130,8 +130,8 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 		task.Frontmatter.JiraNumber = issue.Key
 		task.Frontmatter.JiraURL = s.jira.BaseURL() + "/browse/" + issue.Key
 		task.Frontmatter.SyncStatus = domain.SyncStatusCreated
-		task.Frontmatter.StartDate = now.Format("2006-01-02")
-		task.Frontmatter.EndDate = now.AddDate(0, 0, 7).Format("2006-01-02")
+		task.Frontmatter.JiraStartDate = now.Format("2006-01-02")
+		task.Frontmatter.JiraEndDate = now.AddDate(0, 0, 7).Format("2006-01-02")
 	}
 
 	return nil

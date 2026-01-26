@@ -24,8 +24,8 @@ type frontmatterOutput struct {
 	JiraType         string   `yaml:"jira-type"`
 	JiraState        string   `yaml:"jira-state"`
 	CreatedDate      string   `yaml:"created-date"`
-	StartDate        string   `yaml:"start-date"`
-	EndDate          string   `yaml:"end-date"`
+	JiraStartDate    string   `yaml:"jira-start-date"`
+	JiraEndDate      string   `yaml:"jira-end-date"`
 	JiraURL          string   `yaml:"jira-url"`
 	SyncStatus       string   `yaml:"sync-status"`
 	JiraParent       string   `yaml:"jira-parent"`
@@ -55,8 +55,8 @@ func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 		JiraType:         task.Frontmatter.JiraType,
 		JiraState:        task.Frontmatter.JiraState,
 		CreatedDate:      task.Frontmatter.CreatedDate,
-		StartDate:        task.Frontmatter.StartDate,
-		EndDate:          task.Frontmatter.EndDate,
+		JiraStartDate:    task.Frontmatter.JiraStartDate,
+		JiraEndDate:      task.Frontmatter.JiraEndDate,
 		JiraURL:          task.Frontmatter.JiraURL,
 		SyncStatus:       task.Frontmatter.SyncStatus,
 		JiraParent:       task.Frontmatter.JiraParent,

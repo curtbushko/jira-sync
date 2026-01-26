@@ -259,8 +259,8 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 			Title:        "ERR-5: Complex Task",
 			JiraNumber:   "GUARD-999",
 			CreatedDate:  "2026-01-16",
-			StartDate:    "2026-01-16",
-			EndDate:      "2026-01-23",
+			JiraStartDate: "2026-01-16",
+			JiraEndDate:   "2026-01-23",
 			JiraURL:      "https://test.atlassian.net/browse/GUARD-999",
 			SyncStatus:   domain.SyncStatusLinked,
 			JiraParent:       "GUARD-100",
@@ -288,8 +288,8 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.Title, loaded.Frontmatter.Title)
 	assert.Equal(t, original.Frontmatter.JiraNumber, loaded.Frontmatter.JiraNumber)
 	assert.Equal(t, original.Frontmatter.CreatedDate, loaded.Frontmatter.CreatedDate)
-	assert.Equal(t, original.Frontmatter.StartDate, loaded.Frontmatter.StartDate)
-	assert.Equal(t, original.Frontmatter.EndDate, loaded.Frontmatter.EndDate)
+	assert.Equal(t, original.Frontmatter.JiraStartDate, loaded.Frontmatter.JiraStartDate)
+	assert.Equal(t, original.Frontmatter.JiraEndDate, loaded.Frontmatter.JiraEndDate)
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
 	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)

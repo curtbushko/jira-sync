@@ -113,8 +113,8 @@ func TestSyncService_CreateTickets(t *testing.T) {
 	assert.Equal(t, "GUARD-1", pendingTask.Frontmatter.JiraNumber)
 	assert.Equal(t, domain.SyncStatusCreated, pendingTask.Frontmatter.SyncStatus)
 	assert.Contains(t, pendingTask.Frontmatter.JiraURL, "https://test.atlassian.net")
-	assert.NotEmpty(t, pendingTask.Frontmatter.StartDate)
-	assert.NotEmpty(t, pendingTask.Frontmatter.EndDate)
+	assert.NotEmpty(t, pendingTask.Frontmatter.JiraStartDate)
+	assert.NotEmpty(t, pendingTask.Frontmatter.JiraEndDate)
 }
 
 func TestSyncService_CreateTickets_UsesTaskProject(t *testing.T) {
