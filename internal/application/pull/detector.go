@@ -8,8 +8,8 @@ import (
 	"github.com/curtbushko/jira-sync/internal/ports"
 )
 
-// LinkTypeBlocks is the default Jira link type for blocking relationships.
-const LinkTypeBlocks = "Blocks"
+// LinkTypeBlocking is the default Jira link type for blocking relationships.
+const LinkTypeBlocking = "Blocking"
 
 // DependencyDetector extracts dependencies from Jira issue links.
 type DependencyDetector struct {
@@ -19,7 +19,7 @@ type DependencyDetector struct {
 // NewDependencyDetector creates a new dependency detector.
 func NewDependencyDetector(linkType string) *DependencyDetector {
 	if linkType == "" {
-		linkType = LinkTypeBlocks
+		linkType = LinkTypeBlocking
 	}
 	slog.Debug("creating dependency detector", slog.String("link_type", linkType))
 	return &DependencyDetector{linkType: linkType}

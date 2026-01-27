@@ -226,10 +226,10 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 		return nil, fmt.Errorf("create jira client: %w", err)
 	}
 
-	// Get link type from config (defaults to "Blocks")
+	// Get link type from config (defaults to "Blocking")
 	linkType := viper.GetString("link_types.dependency")
 	if linkType == "" {
-		linkType = "Blocks"
+		linkType = "Blocking"
 	}
 	slog.Debug("using link type for dependencies", slog.String("link_type", linkType))
 

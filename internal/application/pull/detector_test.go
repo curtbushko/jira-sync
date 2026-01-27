@@ -22,11 +22,11 @@ func TestExtractDependencies_WithMatches(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
-		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},
 	}
 
-	detector := NewDependencyDetector("Blocks")
+	detector := NewDependencyDetector("Blocking")
 	deps := detector.ExtractDependencies(task, jiraLinks, allTasks)
 
 	assert.Len(t, deps, 2)
@@ -45,7 +45,7 @@ func TestExtractDependencies_NoMatches(t *testing.T) {
 	allTasks := []*domain.TaskFile{}
 	jiraLinks := []ports.IssueLink{}
 
-	detector := NewDependencyDetector("Blocks")
+	detector := NewDependencyDetector("Blocking")
 	deps := detector.ExtractDependencies(task, jiraLinks, allTasks)
 
 	assert.Empty(t, deps)
@@ -65,11 +65,11 @@ func TestExtractDependencies_IgnoresOtherLinkTypes(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
 		{Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: ""}, // Different type - ignored
 	}
 
-	detector := NewDependencyDetector("Blocks")
+	detector := NewDependencyDetector("Blocking")
 	deps := detector.ExtractDependencies(task, jiraLinks, allTasks)
 
 	assert.Len(t, deps, 1)
@@ -88,10 +88,10 @@ func TestExtractDependencies_UsesJiraKeyWhenNoLocalTask(t *testing.T) {
 	allTasks := []*domain.TaskFile{}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-999", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-999", OutwardIssue: ""},
 	}
 
-	detector := NewDependencyDetector("Blocks")
+	detector := NewDependencyDetector("Blocking")
 	deps := detector.ExtractDependencies(task, jiraLinks, allTasks)
 
 	// Should use Jira key directly since no local task
@@ -112,11 +112,11 @@ func TestExtractDependencies_CustomLinkType(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
-		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: ""}, // Wrong type
+		{Type: "CustomBlocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""}, // Wrong type
 	}
 
-	detector := NewDependencyDetector("Blocking")
+	detector := NewDependencyDetector("CustomBlocks")
 	deps := detector.ExtractDependencies(task, jiraLinks, allTasks)
 
 	assert.Len(t, deps, 1)

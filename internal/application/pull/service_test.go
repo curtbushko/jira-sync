@@ -37,7 +37,7 @@ func TestPullTask_SyncsFromJira(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher, "Blocks")
+	svc := NewService(mockJira, hasher, "Blocking")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -60,7 +60,7 @@ func TestPullTask_SkipsWithoutJiraNumber(t *testing.T) {
 		},
 	}
 
-	svc := NewService(mockJira, hasher, "Blocks")
+	svc := NewService(mockJira, hasher, "Blocking")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -98,12 +98,12 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 
 	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
 		return []ports.IssueLink{
-			{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: ""},
-			{Type: "Blocks", InwardIssue: "GUARD-103", OutwardIssue: ""},
+			{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},
+			{Type: "Blocking", InwardIssue: "GUARD-103", OutwardIssue: ""},
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher, "Blocks")
+	svc := NewService(mockJira, hasher, "Blocking")
 	svc.SetAllTasks(allTasks)
 
 	result := svc.PullTask(context.Background(), task)
@@ -130,7 +130,7 @@ func TestPullTask_HandlesError(t *testing.T) {
 		return nil, assert.AnError
 	}
 
-	svc := NewService(mockJira, hasher, "Blocks")
+	svc := NewService(mockJira, hasher, "Blocking")
 	result := svc.PullTask(context.Background(), task)
 
 	assert.Error(t, result.Error)
@@ -167,7 +167,7 @@ func TestPullAll_PullsMultipleTasks(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher, "Blocks")
+	svc := NewService(mockJira, hasher, "Blocking")
 	results := svc.PullAll(context.Background(), tasks)
 
 	require.Len(t, results, 2)
