@@ -1,5 +1,5 @@
-// Package sync provides the core sync business logic.
-package sync
+// Package push provides push-only sync from local files to Jira.
+package push
 
 import (
 	"context"
@@ -19,7 +19,8 @@ type CategorizedTasks struct {
 	NeedsUpdate []*domain.TaskFile // Content changed since last sync
 }
 
-// Service handles the sync business logic.
+// Service handles pushing local changes to Jira.
+// This is a push-only service - it does NOT pull from Jira.
 type Service struct {
 	repo      ports.TaskRepository
 	jira      ports.JiraClient
@@ -27,7 +28,7 @@ type Service struct {
 	validator *domain.FieldValidator
 }
 
-// NewService creates a new sync service.
+// NewService creates a new push service.
 func NewService(repo ports.TaskRepository, jira ports.JiraClient, hasher ports.HashComputer) *Service {
 	return &Service{
 		repo:      repo,
@@ -37,7 +38,7 @@ func NewService(repo ports.TaskRepository, jira ports.JiraClient, hasher ports.H
 	}
 }
 
-// NewServiceWithLogger creates a new sync service with a logger for validation warnings.
+// NewServiceWithLogger creates a new push service with a logger for validation warnings.
 func NewServiceWithLogger(repo ports.TaskRepository, jira ports.JiraClient, hasher ports.HashComputer, logger io.Writer) *Service {
 	return &Service{
 		repo:      repo,

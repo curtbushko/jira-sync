@@ -12,7 +12,7 @@ import (
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
-	"github.com/curtbushko/jira-sync/internal/application/sync"
+	"github.com/curtbushko/jira-sync/internal/application/push"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 	"github.com/fatih/color"
@@ -43,7 +43,7 @@ type pushContext struct {
 	repo       ports.TaskRepository
 	jiraClient ports.JiraClient
 	hasher     ports.HashComputer
-	service    *sync.Service
+	service    *push.Service
 	issueType  string
 	linkType   string
 }
@@ -144,7 +144,7 @@ func parsePushFlags(cmd *cobra.Command, args []string) pushFlags {
 	}
 }
 
-func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, *sync.CategorizedTasks, error) {
+func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, *push.CategorizedTasks, error) {
 	color.Cyan("Scanning %s...\n", tasksDir)
 
 	tasks, err := repo.ListTasks(tasksDir)
@@ -153,13 +153,13 @@ func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*
 	}
 
 	hasher := hashing.NewSHA256HashComputer()
-	svc := sync.NewService(repo, nil, hasher)
+	svc := push.NewService(repo, nil, hasher)
 	categorized := svc.CategorizeTasks(tasks)
 
 	return tasks, categorized, nil
 }
 
-func printPushSummary(tasks []*domain.TaskFile, categorized *sync.CategorizedTasks) {
+func printPushSummary(tasks []*domain.TaskFile, categorized *push.CategorizedTasks) {
 	fmt.Printf("Found %d task files:\n", len(tasks))
 	fmt.Printf("  - %d pending (will create tickets)\n", len(categorized.Pending))
 	fmt.Printf("  - %d created (will link dependencies)\n", len(categorized.Created))
@@ -168,7 +168,7 @@ func printPushSummary(tasks []*domain.TaskFile, categorized *sync.CategorizedTas
 	fmt.Println()
 }
 
-func handlePushDryRun(categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+func handlePushDryRun(categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	color.Yellow("Dry run - no changes will be made")
 	showPushPendingTickets(categorized.Pending)
 	showPushDependenciesToLink(categorized.Created, tasks)
@@ -208,7 +208,7 @@ func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 	}
 
 	hasher := hashing.NewSHA256HashComputer()
-	service := sync.NewService(repo, jiraClient, hasher)
+	service := push.NewService(repo, jiraClient, hasher)
 
 	issueType := viper.GetString("defaults.issue_type")
 	if issueType == "" {
@@ -230,7 +230,7 @@ func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 	}, nil
 }
 
-func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if err := executePushCreatePhase(ctx, flags, pushCtx, categorized); err != nil {
 		return err
 	}
@@ -247,7 +247,7 @@ func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContex
 	return nil
 }
 
-func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks) error {
+func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks) error {
 	if flags.linkOnly || len(categorized.Pending) == 0 {
 		return nil
 	}
@@ -268,7 +268,7 @@ func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushC
 	return nil
 }
 
-func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *sync.CategorizedTasks, tasks []*domain.TaskFile) error {
+func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if flags.createOnly || len(categorized.Created) == 0 {
 		return nil
 	}
@@ -310,7 +310,7 @@ func printPushLinkedDependencies(task *domain.TaskFile, taskMap map[string]*doma
 	}
 }
 
-func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *sync.CategorizedTasks) error {
+func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *push.CategorizedTasks) error {
 	if len(categorized.NeedsUpdate) == 0 {
 		return nil
 	}

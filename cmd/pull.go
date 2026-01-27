@@ -12,7 +12,7 @@ import (
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
-	"github.com/curtbushko/jira-sync/internal/application/fullsync"
+	"github.com/curtbushko/jira-sync/internal/application/pull"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 	"github.com/fatih/color"
@@ -31,7 +31,7 @@ type pullFlags struct {
 // pullContext holds all the dependencies for pull operations.
 type pullContext struct {
 	repo    ports.TaskRepository
-	service *fullsync.Service
+	service *pull.Service
 }
 
 var pullCmd = &cobra.Command{
@@ -149,9 +149,9 @@ func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullF
 		return err
 	}
 
-	var opts []fullsync.PullOption
+	var opts []pull.Option
 	if flags.force {
-		opts = append(opts, fullsync.WithForce(true))
+		opts = append(opts, pull.WithForce(true))
 	}
 
 	results := pullCtx.service.PullAll(ctx, tasks, opts...)
@@ -159,19 +159,19 @@ func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullF
 	var updated, skipped, conflicts, errors int
 	for _, result := range results {
 		switch result.Action {
-		case fullsync.PullActionUpdated:
+		case pull.ActionUpdated:
 			updated++
 			color.Green("  [WOULD UPDATE] %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
 			for _, field := range result.Fields {
 				fmt.Printf("    - %s\n", field)
 			}
-		case fullsync.PullActionConflict:
+		case pull.ActionConflict:
 			conflicts++
 			color.Yellow("  [CONFLICT] %s (%s) - both local and Jira changed", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-		case fullsync.PullActionError:
+		case pull.ActionError:
 			errors++
 			color.Red("  [ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
-		case fullsync.PullActionSkipped:
+		case pull.ActionSkipped:
 			skipped++
 		}
 	}
@@ -213,7 +213,7 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 	}
 
 	hasher := hashing.NewSHA256HashComputer()
-	service := fullsync.NewService(jiraClient, hasher)
+	service := pull.NewService(jiraClient, hasher)
 
 	// Set all tasks for dependency mapping
 	service.SetAllTasks(allTasks)
@@ -227,17 +227,20 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.TaskFile, flags pullFlags) error {
 	color.Cyan("Pulling updates from Jira...\n")
 
-	var opts []fullsync.PullOption
+	var opts []pull.Option
 	if flags.force {
-		opts = append(opts, fullsync.WithForce(true))
+		opts = append(opts, pull.WithForce(true))
 	}
 
 	results := pullCtx.service.PullAll(ctx, tasks, opts...)
 
 	var updated, skipped, conflicts, errors int
 	for _, result := range results {
+		// Check if dependencies were updated (even if content wasn't)
+		depsUpdated := result.DependencyResult != nil && len(result.DependencyResult.JiraDeps) > 0
+
 		switch result.Action {
-		case fullsync.PullActionUpdated:
+		case pull.ActionUpdated:
 			updated++
 			if err := pullCtx.repo.WriteTask(result.Task); err != nil {
 				color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
@@ -248,14 +251,29 @@ func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.Task
 			for _, field := range result.Fields {
 				fmt.Printf("    - %s\n", field)
 			}
-		case fullsync.PullActionConflict:
+			if depsUpdated {
+				fmt.Printf("    - jira-dependencies\n")
+			}
+		case pull.ActionConflict:
 			conflicts++
 			color.Yellow("[CONFLICT] %s (%s) - use --force to overwrite local", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-		case fullsync.PullActionError:
+		case pull.ActionError:
 			errors++
 			color.Red("[ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
-		case fullsync.PullActionSkipped:
-			skipped++
+		case pull.ActionSkipped:
+			// Even if content didn't change, write if dependencies were pulled from Jira
+			if depsUpdated {
+				updated++
+				if err := pullCtx.repo.WriteTask(result.Task); err != nil {
+					color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
+					errors++
+					continue
+				}
+				color.Green("[OK] Updated %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
+				fmt.Printf("    - jira-dependencies\n")
+			} else {
+				skipped++
+			}
 		}
 	}
 

@@ -1,4 +1,4 @@
-package fullsync
+package pull
 
 import "sort"
 

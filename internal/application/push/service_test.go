@@ -1,4 +1,4 @@
-package sync
+package push
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSyncService_CategorizeTasks(t *testing.T) {
+func TestPushService_CategorizeTasks(t *testing.T) {
 	hasher := hashing.NewSHA256HashComputer()
 
 	// Create tasks with different states
@@ -82,7 +82,7 @@ func TestSyncService_CategorizeTasks(t *testing.T) {
 	assert.Equal(t, modifiedTask, result.NeedsUpdate[0])
 }
 
-func TestSyncService_CreateTickets(t *testing.T) {
+func TestPushService_CreateTickets(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 	hasher := hashing.NewSHA256HashComputer()
@@ -115,7 +115,7 @@ func TestSyncService_CreateTickets(t *testing.T) {
 	assert.Contains(t, pendingTask.Frontmatter.JiraURL, "https://test.atlassian.net")
 }
 
-func TestSyncService_CreateTickets_UsesTaskProject(t *testing.T) {
+func TestPushService_CreateTickets_UsesTaskProject(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 
@@ -140,7 +140,7 @@ func TestSyncService_CreateTickets_UsesTaskProject(t *testing.T) {
 	assert.Equal(t, "MYPROJ", mockJira.CreateIssueCalls[0].Project)
 }
 
-func TestSyncService_CreateTickets_JiraError(t *testing.T) {
+func TestPushService_CreateTickets_JiraError(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.CreateIssueFunc = func(_ context.Context, _ ports.CreateIssueRequest) (*ports.Issue, error) {
 		return nil, errors.New("jira connection failed")
@@ -163,47 +163,65 @@ func TestSyncService_CreateTickets_JiraError(t *testing.T) {
 	assert.Contains(t, err.Error(), "jira connection failed")
 }
 
-func TestSyncService_LinkDependencies(t *testing.T) {
-	mockJira := jira.NewMockJiraClient()
-
-	tasks := []*domain.TaskFile{
+func TestPushService_LinkDependencies(t *testing.T) {
+	tests := []struct {
+		name       string
+		dependency string
+	}{
 		{
-			Frontmatter: domain.Frontmatter{
-				Title:            "KB-1: First",
-				JiraNumber:       "GUARD-101",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
-			},
+			name:       "plain_id",
+			dependency: "KB-1",
 		},
 		{
-			Frontmatter: domain.Frontmatter{
-				Title:            "KB-2: Second",
-				JiraNumber:       "GUARD-102",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"},
-			},
+			name:       "wiki_link_format",
+			dependency: "[KB-1: First](20260116-100000.md)",
 		},
 	}
 
-	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			mockJira := jira.NewMockJiraClient()
 
-	require.NoError(t, err)
+			tasks := []*domain.TaskFile{
+				{
+					Frontmatter: domain.Frontmatter{
+						Title:            "KB-1: First",
+						JiraNumber:       "GUARD-101",
+						SyncStatus:       domain.SyncStatusCreated,
+						JiraParent:       "GUARD-100",
+						JiraDependencies: []string{},
+					},
+				},
+				{
+					Frontmatter: domain.Frontmatter{
+						Title:            "KB-2: Second",
+						JiraNumber:       "GUARD-102",
+						SyncStatus:       domain.SyncStatusCreated,
+						JiraParent:       "GUARD-100",
+						JiraDependencies: []string{testCase.dependency},
+					},
+				},
+			}
 
-	// Verify link was created: GUARD-102 blocked by GUARD-101
-	assert.Len(t, mockJira.CreateLinkCalls, 1)
-	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
-	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
-	assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
+			svc := NewService(nil, mockJira, nil)
+			err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
 
-	// Verify tasks updated to linked
-	assert.Equal(t, domain.SyncStatusLinked, tasks[0].Frontmatter.SyncStatus)
-	assert.Equal(t, domain.SyncStatusLinked, tasks[1].Frontmatter.SyncStatus)
+			require.NoError(t, err)
+
+			// Verify link was created: GUARD-102 blocked by GUARD-101
+			assert.Len(t, mockJira.CreateLinkCalls, 1)
+			assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
+			assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
+			assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
+
+			// Verify tasks updated to linked
+			assert.Equal(t, domain.SyncStatusLinked, tasks[0].Frontmatter.SyncStatus)
+			assert.Equal(t, domain.SyncStatusLinked, tasks[1].Frontmatter.SyncStatus)
+		})
+	}
 }
 
-func TestSyncService_LinkDependencies_MultipleDeps(t *testing.T) {
+func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 
 	tasks := []*domain.TaskFile{
@@ -245,7 +263,7 @@ func TestSyncService_LinkDependencies_MultipleDeps(t *testing.T) {
 	assert.Len(t, mockJira.CreateLinkCalls, 2)
 }
 
-func TestSyncService_LinkDependencies_MissingDep(t *testing.T) {
+func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 
 	tasks := []*domain.TaskFile{
@@ -267,47 +285,7 @@ func TestSyncService_LinkDependencies_MissingDep(t *testing.T) {
 	assert.Contains(t, err.Error(), "KB-1")
 }
 
-func TestSyncService_LinkDependencies_WikiLinkFormat(t *testing.T) {
-	mockJira := jira.NewMockJiraClient()
-
-	tasks := []*domain.TaskFile{
-		{
-			Frontmatter: domain.Frontmatter{
-				Title:            "KB-1: First",
-				JiraNumber:       "GUARD-101",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
-			},
-		},
-		{
-			Frontmatter: domain.Frontmatter{
-				Title:            "KB-2: Second",
-				JiraNumber:       "GUARD-102",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"[KB-1: First](20260116-100000.md)"},
-			},
-		},
-	}
-
-	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
-
-	require.NoError(t, err)
-
-	// Verify link was created: GUARD-102 blocked by GUARD-101
-	assert.Len(t, mockJira.CreateLinkCalls, 1)
-	assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
-	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
-	assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
-
-	// Verify tasks updated to linked
-	assert.Equal(t, domain.SyncStatusLinked, tasks[0].Frontmatter.SyncStatus)
-	assert.Equal(t, domain.SyncStatusLinked, tasks[1].Frontmatter.SyncStatus)
-}
-
-func TestSyncService_UpdateModified(t *testing.T) {
+func TestPushService_UpdateModified(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()
 
@@ -339,7 +317,7 @@ func TestSyncService_UpdateModified(t *testing.T) {
 	assert.Equal(t, expectedHash, modifiedTask.Frontmatter.ContentHash)
 }
 
-func TestSyncService_BuildTaskIDMap(t *testing.T) {
+func TestPushService_BuildTaskIDMap(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
@@ -369,7 +347,7 @@ func TestSyncService_BuildTaskIDMap(t *testing.T) {
 	assert.Equal(t, "GUARD-103", idMap["CTRL-10"])
 }
 
-func TestSyncService_ExtractTaskID(t *testing.T) {
+func TestPushService_ExtractTaskID(t *testing.T) {
 	tests := []struct {
 		title    string
 		expected string
@@ -390,7 +368,7 @@ func TestSyncService_ExtractTaskID(t *testing.T) {
 	}
 }
 
-func TestSyncService_CreateTickets_TruncatesLongSummary(t *testing.T) {
+func TestPushService_CreateTickets_TruncatesLongSummary(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 
@@ -421,7 +399,7 @@ func TestSyncService_CreateTickets_TruncatesLongSummary(t *testing.T) {
 	assert.LessOrEqual(t, len(pendingTask.Frontmatter.Title), domain.JiraSummaryMaxLength)
 }
 
-func TestSyncService_CreateTickets_TruncatesLongDescription(t *testing.T) {
+func TestPushService_CreateTickets_TruncatesLongDescription(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 
@@ -449,7 +427,7 @@ func TestSyncService_CreateTickets_TruncatesLongDescription(t *testing.T) {
 	assert.True(t, strings.HasSuffix(sentDescription, "[Content truncated: exceeded Jira limit]"))
 }
 
-func TestSyncService_CreateTickets_WithLogger(t *testing.T) {
+func TestPushService_CreateTickets_WithLogger(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 
@@ -479,7 +457,7 @@ func TestSyncService_CreateTickets_WithLogger(t *testing.T) {
 	assert.Contains(t, logOutput, "/tasks/test.md")
 }
 
-func TestSyncService_UpdateModified_TruncatesFields(t *testing.T) {
+func TestPushService_UpdateModified_TruncatesFields(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()
 
@@ -508,7 +486,7 @@ func TestSyncService_UpdateModified_TruncatesFields(t *testing.T) {
 	assert.LessOrEqual(t, len(sentSummary), domain.JiraSummaryMaxLength)
 }
 
-func TestSyncService_CreateTickets_NoTruncationNeeded(t *testing.T) {
+func TestPushService_CreateTickets_NoTruncationNeeded(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 

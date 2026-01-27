@@ -1,5 +1,5 @@
-// Package fullsync provides bidirectional sync between local files and Jira.
-package fullsync
+// Package pull provides pull-only sync from Jira to local files.
+package pull
 
 import (
 	"time"
@@ -7,6 +7,9 @@ import (
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 )
+
+// LinkTypeBlocks is the Jira link type for blocking relationships.
+const LinkTypeBlocks = "Blocks"
 
 // ChangeType indicates the direction of change detected.
 type ChangeType int
@@ -146,29 +149,27 @@ func (d *ChangeDetector) parseLastSynced(lastSynced string) time.Time {
 	return parsed
 }
 
-// DependencyChangeResult holds the result of comparing jira-dependencies.
-type DependencyChangeResult struct {
+// DependencyPullResult holds the result of pulling jira-dependencies.
+// This is a pull-only result - it does NOT contain ToAdd/ToRemove for push operations.
+type DependencyPullResult struct {
 	HasChanges bool
-	ToAdd      []string // Jira issue keys to create "Blocks" links for
-	ToRemove   []string // Link IDs to delete
-	LocalDeps  []string // Local dependency task IDs (for reporting)
-	JiraDeps   []string // Jira dependency task IDs (for reporting)
+	LocalDeps  []string // Local dependency task IDs (before pull)
+	JiraDeps   []string // Jira dependency task IDs (what we pulled)
 }
 
-// DetectDependencyChanges compares local jira-dependencies with Jira issue links.
-// Returns which links need to be added or removed to sync.
-func (d *ChangeDetector) DetectDependencyChanges(
+// DetectDependencies compares local jira-dependencies with Jira issue links.
+// Returns which dependencies exist in Jira (for pulling to local).
+// This is a pull-only operation - it does NOT determine what to push.
+func (d *ChangeDetector) DetectDependencies(
 	task *domain.TaskFile,
 	jiraLinks []ports.IssueLink,
 	allTasks []*domain.TaskFile,
-) DependencyChangeResult {
-	// Build mapping from task ID to Jira key and vice versa
-	taskIDToJiraKey := make(map[string]string)
+) DependencyPullResult {
+	// Build mapping from Jira key to task ID
 	jiraKeyToTaskID := make(map[string]string)
 	for _, t := range allTasks {
 		taskID := t.TaskID()
 		if taskID != "" && t.Frontmatter.JiraNumber != "" {
-			taskIDToJiraKey[taskID] = t.Frontmatter.JiraNumber
 			jiraKeyToTaskID[t.Frontmatter.JiraNumber] = taskID
 		}
 	}
@@ -176,67 +177,25 @@ func (d *ChangeDetector) DetectDependencyChanges(
 	// Get local dependency task IDs
 	localDepIDs := task.GetJiraDependencyIDs()
 
-	// Convert local deps to Jira keys
-	var localJiraKeys []string
-	for _, depID := range localDepIDs {
-		if jiraKey, ok := taskIDToJiraKey[depID]; ok {
-			localJiraKeys = append(localJiraKeys, jiraKey)
-		}
-	}
-
 	// Extract Jira "Blocks" links where this task is blocked (outward)
 	// A "Blocks" link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123
-	var jiraBlockerKeys []string
-	linkIDByBlocker := make(map[string]string) // Jira key -> link ID
+	var jiraDepTaskIDs []string
 
 	for _, link := range jiraLinks {
 		// Only consider "Blocks" type links where this task is the blocked (outward) issue
 		if link.Type == LinkTypeBlocks && link.OutwardIssue == task.Frontmatter.JiraNumber && link.InwardIssue != "" {
-			jiraBlockerKeys = append(jiraBlockerKeys, link.InwardIssue)
-			linkIDByBlocker[link.InwardIssue] = link.ID
-		}
-	}
-
-	// Compare local vs Jira
-	if stringSlicesEqual(localJiraKeys, jiraBlockerKeys) {
-		// Convert Jira keys back to task IDs for reporting
-		var jiraDepTaskIDs []string
-		for _, key := range jiraBlockerKeys {
-			if taskID, ok := jiraKeyToTaskID[key]; ok {
+			// Convert Jira key to task ID
+			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
 				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
 			}
 		}
-		return DependencyChangeResult{
-			HasChanges: false,
-			LocalDeps:  localDepIDs,
-			JiraDeps:   jiraDepTaskIDs,
-		}
 	}
 
-	// Calculate what needs to be added/removed
-	toAddKeys := difference(localJiraKeys, jiraBlockerKeys)
-	toRemoveKeys := difference(jiraBlockerKeys, localJiraKeys)
+	// Check if there's a difference
+	hasChanges := !stringSlicesEqual(localDepIDs, jiraDepTaskIDs)
 
-	// Convert toRemove keys to link IDs
-	var toRemoveLinkIDs []string
-	for _, key := range toRemoveKeys {
-		if linkID, ok := linkIDByBlocker[key]; ok {
-			toRemoveLinkIDs = append(toRemoveLinkIDs, linkID)
-		}
-	}
-
-	// Convert Jira keys back to task IDs for reporting
-	var jiraDepTaskIDs []string
-	for _, key := range jiraBlockerKeys {
-		if taskID, ok := jiraKeyToTaskID[key]; ok {
-			jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
-		}
-	}
-
-	return DependencyChangeResult{
-		HasChanges: true,
-		ToAdd:      toAddKeys,
-		ToRemove:   toRemoveLinkIDs,
+	return DependencyPullResult{
+		HasChanges: hasChanges,
 		LocalDeps:  localDepIDs,
 		JiraDeps:   jiraDepTaskIDs,
 	}

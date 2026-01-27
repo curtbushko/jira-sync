@@ -10,7 +10,7 @@ import (
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
-	"github.com/curtbushko/jira-sync/internal/application/sync"
+	"github.com/curtbushko/jira-sync/internal/application/push"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.SetBaseURL("https://test.atlassian.net")
 	hasher := hashing.NewSHA256HashComputer()
-	svc := sync.NewService(repo, mockJira, hasher)
+	svc := push.NewService(repo, mockJira, hasher)
 
 	// Step 1: Create task files
 	tasks := []*domain.TaskFile{
@@ -175,7 +175,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 	repo := filesystem.NewFileTaskRepository()
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()
-	svc := sync.NewService(repo, mockJira, hasher)
+	svc := push.NewService(repo, mockJira, hasher)
 
 	// Create a complex dependency graph
 	// KB-1 (no deps)
@@ -299,7 +299,7 @@ func TestE2E_EmptyDirectory(t *testing.T) {
 
 	repo := filesystem.NewFileTaskRepository()
 	hasher := hashing.NewSHA256HashComputer()
-	svc := sync.NewService(repo, nil, hasher)
+	svc := push.NewService(repo, nil, hasher)
 
 	tasks, err := repo.ListTasks(tmpDir)
 	require.NoError(t, err)
