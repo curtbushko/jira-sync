@@ -11,9 +11,9 @@ import (
 func TestTopologicalSort_SimpleChain(t *testing.T) {
 	// KB-1 -> KB-2 -> KB-3
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-3: Third", SyncDependencies: []string{"KB-2"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Third", JiraDependencies: []string{"KB-2"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", JiraDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(tasks, tasks)
@@ -28,9 +28,9 @@ func TestTopologicalSort_SimpleChain(t *testing.T) {
 func TestTopologicalSort_MultipleDependencies(t *testing.T) {
 	// CTRL-1 depends on both KB-3 and ERR-1
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "CTRL-1: Controller", SyncDependencies: []string{"KB-3", "ERR-1"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-3: Types", SyncDependencies: []string{}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "ERR-1: Detector", SyncDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "CTRL-1: Controller", JiraDependencies: []string{"KB-3", "ERR-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Types", JiraDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "ERR-1: Detector", JiraDependencies: []string{}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(tasks, tasks)
@@ -45,8 +45,8 @@ func TestTopologicalSort_MultipleDependencies(t *testing.T) {
 func TestTopologicalSort_CircularDependency(t *testing.T) {
 	// KB-1 -> KB-2 -> KB-1 (circular!)
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{"KB-2"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", JiraDependencies: []string{"KB-2"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
 	}
 
 	_, err := TopologicalSort(tasks, tasks)
@@ -58,11 +58,11 @@ func TestTopologicalSort_CircularDependency(t *testing.T) {
 func TestTopologicalSort_DependencyAlreadyCreated(t *testing.T) {
 	// KB-2 depends on KB-1, but KB-1 is already created (not in pending list)
 	pending := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
 	}
 	allTasks := []*domain.TaskFile{
 		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncStatus: domain.SyncStatusCreated, JiraNumber: "GUARD-101", JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(pending, allTasks)
@@ -75,9 +75,9 @@ func TestTopologicalSort_DependencyAlreadyCreated(t *testing.T) {
 func TestTopologicalSort_NoDependencies(t *testing.T) {
 	// No dependencies - any order is valid
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-3: Third", SyncDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", JiraDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Third", JiraDependencies: []string{}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(tasks, tasks)
@@ -97,8 +97,8 @@ func TestTopologicalSort_NoDependencies(t *testing.T) {
 func TestTopologicalSort_WikiLinkFormat(t *testing.T) {
 	// Dependencies using wiki link format
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"[KB-1: First](20260116.md)"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", SyncDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"[KB-1: First](20260116.md)"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-1: First", JiraDependencies: []string{}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(tasks, tasks)
@@ -124,10 +124,10 @@ func TestTopologicalSort_DiamondDependency(t *testing.T) {
 	//    \    /
 	//     KB-4
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-4: Final", SyncDependencies: []string{"KB-2", "KB-3"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Branch A", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-3: Branch B", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-1: Root", SyncDependencies: []string{}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-4: Final", JiraDependencies: []string{"KB-2", "KB-3"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Branch A", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-3: Branch B", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-1: Root", JiraDependencies: []string{}, JiraParent: "P"}},
 	}
 
 	sorted, err := TopologicalSort(tasks, tasks)
@@ -147,7 +147,7 @@ func TestTopologicalSort_DiamondDependency(t *testing.T) {
 func TestTopologicalSort_MissingDependency(t *testing.T) {
 	// KB-2 depends on KB-1, but KB-1 doesn't exist
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", SyncDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
 	}
 
 	_, err := TopologicalSort(tasks, tasks)

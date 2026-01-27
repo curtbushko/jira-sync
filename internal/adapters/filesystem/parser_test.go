@@ -77,27 +77,22 @@ Implement detection of replica failures.
 	assert.Equal(t, "GUARD-102", task.Frontmatter.JiraNumber)
 	assert.Equal(t, "linked", task.Frontmatter.SyncStatus)
 	assert.Equal(t, "In Progress", task.Frontmatter.JiraState)
-	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.SyncDependencies)
+	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraDependencies)
 	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraDependencies)
 	assert.Contains(t, task.Description, "Implement detection of replica failures.")
 	assert.Contains(t, task.Description, "## Acceptance Criteria")
 }
 
-func TestParser_Parse_SeparateDependencies(t *testing.T) {
-	// Test case where sync-dependencies and jira-dependencies differ
+func TestParser_Parse_JiraDependencies(t *testing.T) {
 	content := `---
-title: "ERR-3: Separate Deps"
+title: "ERR-3: With Deps"
 jira-number: ""
 jira-project: GUARD
 jira-state: Todo
 created-date: "2026-01-16"
-start-date: ""
-end-date: ""
 jira-url: ""
 sync-status: pending
 jira-parent: GUARD-100
-sync-dependencies:
-  - KB-1
 jira-dependencies:
   - KB-1
   - KB-2
@@ -105,13 +100,12 @@ content-hash: ""
 last-synced: ""
 ---
 
-Task with separate dependency types.`
+Task with jira dependencies.`
 
 	parser := NewParser()
 	task, err := parser.Parse("test.md", content)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"KB-1"}, task.Frontmatter.SyncDependencies)
 	assert.Equal(t, []string{"KB-1", "KB-2"}, task.Frontmatter.JiraDependencies)
 }
 
@@ -278,9 +272,9 @@ Old task description.`
 	assert.Equal(t, "Todo", task.Frontmatter.JiraState)
 	assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
 	// Slices should be non-nil empty
-	assert.NotNil(t, task.Frontmatter.SyncDependencies)
 	assert.NotNil(t, task.Frontmatter.JiraDependencies)
-	assert.Empty(t, task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraDependencies)
+	assert.Empty(t, task.Frontmatter.JiraDependencies)
 	assert.Empty(t, task.Frontmatter.JiraDependencies)
 }
 
@@ -306,6 +300,6 @@ Task description.`
 	// Should preserve existing values
 	assert.Equal(t, "Done", task.Frontmatter.JiraState)
 	assert.Equal(t, "linked", task.Frontmatter.SyncStatus)
-	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.SyncDependencies)
+	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraDependencies)
 	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraDependencies)
 }

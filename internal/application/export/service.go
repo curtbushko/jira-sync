@@ -87,7 +87,6 @@ func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*R
 			JiraURL:          issue.URL,
 			SyncStatus:       domain.SyncStatusLinked,
 			JiraParent:       parent,
-			SyncDependencies: []string{},
 			JiraDependencies: deps,
 			LastSynced:       time.Now().UTC().Format(time.RFC3339),
 		},

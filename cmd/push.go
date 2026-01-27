@@ -157,7 +157,7 @@ func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*
 	svc := push.NewService(repo, nil, hasher)
 	categorized := svc.CategorizeTasks(tasks)
 
-	// Topologically sort pending tasks by sync-dependencies
+	// Topologically sort pending tasks by jira-dependencies
 	if len(categorized.Pending) > 0 {
 		sorted, err := push.TopologicalSort(categorized.Pending, tasks)
 		if err != nil {

@@ -7,7 +7,7 @@ import (
 )
 
 // TopologicalSort orders tasks so that dependencies come before dependent tasks.
-// It uses sync-dependencies to determine ordering (not jira-dependencies).
+// It uses jira-dependencies to determine ordering.
 //
 // Parameters:
 //   - pending: tasks to sort (typically tasks with sync-status: pending)
@@ -47,7 +47,7 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 	// Process dependencies
 	for _, task := range pending {
 		taskID := task.TaskID()
-		depIDs := task.SyncDependencyIDs()
+		depIDs := task.JiraDependencyIDs()
 
 		for _, depID := range depIDs {
 			// Check if dependency exists

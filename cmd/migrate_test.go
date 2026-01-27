@@ -69,7 +69,6 @@ Old task description.`
 	// Should contain migrated fields
 	assert.Contains(t, contentStr, "jira-state: Todo")
 	assert.Contains(t, contentStr, "sync-status: pending")
-	assert.Contains(t, contentStr, "sync-dependencies: []")
 	assert.Contains(t, contentStr, "jira-dependencies: []")
 }
 
@@ -112,7 +111,6 @@ jira-project: GUARD
 jira-state: Done
 sync-status: linked
 jira-parent: GUARD-100
-sync-dependencies: []
 jira-dependencies: []
 content-hash: abc123
 ---

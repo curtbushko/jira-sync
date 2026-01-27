@@ -139,7 +139,7 @@ func TestHashComputer_JiraDependencyOrderMatters(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_IgnoresJiraFieldsAndSyncDependencies(t *testing.T) {
+func TestHashComputer_IgnoresJiraFieldsAndJiraDependencies(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
 			Title:            "Test",
@@ -148,7 +148,6 @@ func TestHashComputer_IgnoresJiraFieldsAndSyncDependencies(t *testing.T) {
 			JiraURL:          "",
 			SyncStatus:       "pending",
 			ContentHash:      "",
-			SyncDependencies: []string{}, // sync-dependencies should be ignored
 			JiraDependencies: []string{"A"},
 		},
 		Description: "Desc",
@@ -161,7 +160,6 @@ func TestHashComputer_IgnoresJiraFieldsAndSyncDependencies(t *testing.T) {
 			JiraURL:          "https://jira.com/GUARD-101",
 			SyncStatus:       "linked",
 			ContentHash:      "abc123",
-			SyncDependencies: []string{"X", "Y", "Z"}, // different sync-deps should be ignored
 			JiraDependencies: []string{"A"},
 		},
 		Description: "Desc",
@@ -197,15 +195,13 @@ func TestHashComputer_EmptyJiraDependencies(t *testing.T) {
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_SyncDependenciesNotIncluded(t *testing.T) {
-	// Test that changing sync-dependencies does NOT change the hash
-	// since sync-deps only affect creation order, not Jira content
+func TestHashComputer_JiraDependenciesIncluded(t *testing.T) {
+	// Test that changing jira-dependencies changes the hash
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
 			Title:            "Test",
 			JiraParent:       "P",
-			SyncDependencies: []string{"A", "B"},
-			JiraDependencies: []string{"X"},
+			JiraDependencies: []string{"A", "B"},
 		},
 		Description: "Desc",
 	}
@@ -213,15 +209,14 @@ func TestHashComputer_SyncDependenciesNotIncluded(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:            "Test",
 			JiraParent:       "P",
-			SyncDependencies: []string{"C", "D", "E"}, // Different sync deps
-			JiraDependencies: []string{"X"},           // Same jira deps
+			JiraDependencies: []string{"C", "D", "E"}, // Different jira deps
 		},
 		Description: "Desc",
 	}
 
 	hasher := NewSHA256HashComputer()
 
-	// Hash should be the same since only jira-dependencies are included
-	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+	// Hash should be different since jira-dependencies are included
+	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 

@@ -27,7 +27,6 @@ type Frontmatter struct {
 	JiraURL          string   `yaml:"jira-url"`
 	SyncStatus       string   `yaml:"sync-status"`
 	JiraParent       string   `yaml:"jira-parent"`
-	SyncDependencies []string `yaml:"sync-dependencies"`
 	JiraDependencies []string `yaml:"jira-dependencies"`
 	ContentHash      string   `yaml:"content-hash"`
 	LastSynced       string   `yaml:"last-synced"`
@@ -41,12 +40,6 @@ func (t *TaskFile) TaskID() string {
 		}
 	}
 	return t.Frontmatter.Title
-}
-
-// SyncDependencyIDs extracts task IDs from sync-dependencies.
-// Handles both wiki link format and legacy plain task IDs.
-func (t *TaskFile) SyncDependencyIDs() []string {
-	return extractDependencyIDs(t.Frontmatter.SyncDependencies)
 }
 
 // JiraDependencyIDs extracts task IDs from jira-dependencies.
@@ -117,11 +110,6 @@ func (t *TaskFile) MigrateFrontmatter() bool {
 	}
 
 	// Initialize nil slices to empty slices
-	if t.Frontmatter.SyncDependencies == nil {
-		t.Frontmatter.SyncDependencies = []string{}
-		migrated = true
-	}
-
 	if t.Frontmatter.JiraDependencies == nil {
 		t.Frontmatter.JiraDependencies = []string{}
 		migrated = true

@@ -19,9 +19,8 @@ func NewSHA256HashComputer() *SHA256HashComputer {
 
 // ComputeHash returns SHA256 hash of task content.
 // It hashes title + jira-parent + jira-dependencies + description.
-// Fields like jira-number, jira-url, sync-status, content-hash, and sync-dependencies
+// Fields like jira-number, jira-url, sync-status, and content-hash
 // are excluded because they don't affect the Jira ticket content.
-// Note: sync-dependencies only affect creation order, not Jira content.
 func (h *SHA256HashComputer) ComputeHash(task *domain.TaskFile) string {
 	var buf bytes.Buffer
 
@@ -32,7 +31,6 @@ func (h *SHA256HashComputer) ComputeHash(task *domain.TaskFile) string {
 	buf.WriteString("\x00")
 
 	// Write jira-dependencies in order (these create Jira links)
-	// Note: sync-dependencies are NOT included since they only affect creation order
 	for _, dep := range task.Frontmatter.JiraDependencies {
 		buf.WriteString(dep)
 		buf.WriteString("\x00")

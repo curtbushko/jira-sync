@@ -27,7 +27,6 @@ type frontmatterOutput struct {
 	JiraURL          string   `yaml:"jira-url"`
 	SyncStatus       string   `yaml:"sync-status"`
 	JiraParent       string   `yaml:"jira-parent"`
-	SyncDependencies []string `yaml:"sync-dependencies,flow"`
 	JiraDependencies []string `yaml:"jira-dependencies,flow"`
 	ContentHash      string   `yaml:"content-hash"`
 	LastSynced       string   `yaml:"last-synced"`
@@ -36,10 +35,6 @@ type frontmatterOutput struct {
 // Marshal converts a TaskFile to markdown content with YAML frontmatter.
 func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 	// Ensure dependencies are never nil for consistent output
-	syncDeps := task.Frontmatter.SyncDependencies
-	if syncDeps == nil {
-		syncDeps = []string{}
-	}
 	jiraDeps := task.Frontmatter.JiraDependencies
 	if jiraDeps == nil {
 		jiraDeps = []string{}
@@ -56,7 +51,6 @@ func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 		JiraURL:          task.Frontmatter.JiraURL,
 		SyncStatus:       task.Frontmatter.SyncStatus,
 		JiraParent:       task.Frontmatter.JiraParent,
-		SyncDependencies: syncDeps,
 		JiraDependencies: jiraDeps,
 		ContentHash:      task.Frontmatter.ContentHash,
 		LastSynced:       task.Frontmatter.LastSynced,

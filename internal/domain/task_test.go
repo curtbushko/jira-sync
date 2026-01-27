@@ -51,7 +51,7 @@ func TestTaskFile_TaskID(t *testing.T) {
 	}
 }
 
-func TestTaskFile_SyncDependencyIDs(t *testing.T) {
+func TestTaskFile_JiraDependencyIDs(t *testing.T) {
 	tests := []struct {
 		name     string
 		deps     []string
@@ -91,51 +91,6 @@ func TestTaskFile_SyncDependencyIDs(t *testing.T) {
 			name:     "filters empty strings",
 			deps:     []string{"", "KB-1", ""},
 			expected: []string{"KB-1"},
-		},
-	}
-
-	for _, testCase := range tests {
-		t.Run(testCase.name, func(t *testing.T) {
-			task := &TaskFile{
-				Frontmatter: Frontmatter{
-					SyncDependencies: testCase.deps,
-				},
-			}
-			assert.Equal(t, testCase.expected, task.SyncDependencyIDs())
-		})
-	}
-}
-
-func TestTaskFile_JiraDependencyIDs(t *testing.T) {
-	tests := []struct {
-		name     string
-		deps     []string
-		expected []string
-	}{
-		{
-			name:     "extracts IDs from wiki links",
-			deps:     []string{"[KB-1: Initialize Project](20260116-103001.md)"},
-			expected: []string{"KB-1"},
-		},
-		{
-			name:     "extracts IDs from legacy format",
-			deps:     []string{"KB-1", "ERR-2"},
-			expected: []string{"KB-1", "ERR-2"},
-		},
-		{
-			name:     "handles mixed formats",
-			deps:     []string{"[KB-1: Init](file.md)", "ERR-2"},
-			expected: []string{"KB-1", "ERR-2"},
-		},
-		{
-			name:     "handles empty list",
-			deps:     []string{},
-			expected: nil,
-		},
-		{
-			name:     "handles nil list",
-			deps:     nil,
-			expected: nil,
 		},
 	}
 
@@ -244,9 +199,7 @@ func TestMigrateFrontmatter_MissingFields(t *testing.T) {
 	assert.True(t, migrated, "should return true when fields were added")
 	assert.Equal(t, DefaultJiraState, task.Frontmatter.JiraState)
 	assert.Equal(t, SyncStatusPending, task.Frontmatter.SyncStatus)
-	assert.NotNil(t, task.Frontmatter.SyncDependencies)
 	assert.NotNil(t, task.Frontmatter.JiraDependencies)
-	assert.Empty(t, task.Frontmatter.SyncDependencies)
 	assert.Empty(t, task.Frontmatter.JiraDependencies)
 }
 
@@ -260,7 +213,6 @@ func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
 			JiraState:        "In Progress",
 			SyncStatus:       SyncStatusLinked,
 			JiraParent:       "GUARD-100",
-			SyncDependencies: []string{"KB-0"},
 			JiraDependencies: []string{"KB-0"},
 			ContentHash:      "abc123",
 			LastSynced:       "2026-01-20T10:00:00Z",
@@ -289,7 +241,6 @@ func TestMigrateFrontmatter_PartialFields(t *testing.T) {
 	assert.True(t, migrated)
 	assert.Equal(t, "Done", task.Frontmatter.JiraState)       // preserved
 	assert.Equal(t, SyncStatusPending, task.Frontmatter.SyncStatus) // set default
-	assert.NotNil(t, task.Frontmatter.SyncDependencies)
 	assert.NotNil(t, task.Frontmatter.JiraDependencies)
 }
 
@@ -304,7 +255,6 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 			JiraState:        "In Review",
 			SyncStatus:       SyncStatusCreated,
 			JiraParent:       "GUARD-100",
-			SyncDependencies: existingDeps,
 			JiraDependencies: existingDeps,
 			ContentHash:      "existinghash",
 			LastSynced:       "2026-01-15T08:00:00Z",
@@ -319,7 +269,6 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 	assert.Equal(t, "Story", task.Frontmatter.JiraType)
 	assert.Equal(t, "In Review", task.Frontmatter.JiraState)
 	assert.Equal(t, SyncStatusCreated, task.Frontmatter.SyncStatus)
-	assert.Equal(t, existingDeps, task.Frontmatter.SyncDependencies)
 	assert.Equal(t, existingDeps, task.Frontmatter.JiraDependencies)
 	assert.Equal(t, "existinghash", task.Frontmatter.ContentHash)
 	assert.Equal(t, "2026-01-15T08:00:00Z", task.Frontmatter.LastSynced)
@@ -329,7 +278,6 @@ func TestMigrateFrontmatter_InitializesEmptySlices(t *testing.T) {
 	task := &TaskFile{
 		Frontmatter: Frontmatter{
 			Title:            "KB-1: Test",
-			SyncDependencies: nil, // nil slice
 			JiraDependencies: nil, // nil slice
 		},
 	}
@@ -338,9 +286,7 @@ func TestMigrateFrontmatter_InitializesEmptySlices(t *testing.T) {
 
 	assert.True(t, migrated)
 	// Should be non-nil empty slices after migration
-	assert.NotNil(t, task.Frontmatter.SyncDependencies)
 	assert.NotNil(t, task.Frontmatter.JiraDependencies)
-	assert.Len(t, task.Frontmatter.SyncDependencies, 0)
 	assert.Len(t, task.Frontmatter.JiraDependencies, 0)
 }
 
@@ -365,7 +311,6 @@ func TestMigrateFrontmatter_PreservesExistingJiraType(t *testing.T) {
 			JiraType:         "Epic",
 			JiraState:        "Todo",
 			SyncStatus:       SyncStatusPending,
-			SyncDependencies: []string{},
 			JiraDependencies: []string{},
 		},
 	}
@@ -403,4 +348,3 @@ func TestIsEpic_True(t *testing.T) {
 		})
 	}
 }
-

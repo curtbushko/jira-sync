@@ -379,9 +379,9 @@ func TestExport_InitializesEmptySlices(t *testing.T) {
 
 	require.NoError(t, err)
 	// Should have empty slices, not nil
-	assert.NotNil(t, result.Task.Frontmatter.SyncDependencies)
 	assert.NotNil(t, result.Task.Frontmatter.JiraDependencies)
-	assert.Empty(t, result.Task.Frontmatter.SyncDependencies)
+	assert.NotNil(t, result.Task.Frontmatter.JiraDependencies)
+	assert.Empty(t, result.Task.Frontmatter.JiraDependencies)
 	assert.Empty(t, result.Task.Frontmatter.JiraDependencies)
 }
 

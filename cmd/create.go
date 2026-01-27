@@ -39,9 +39,7 @@ func init() {
 	// Optional flags
 	createCmd.Flags().String("jira-project", "", "Jira project key (e.g., 'GUARD')")
 	createCmd.Flags().String("type", domain.DefaultIssueType, "Jira issue type (Task, Story, Bug, Epic)")
-	createCmd.Flags().String("sync-deps", "", "Comma-separated task IDs for creation ordering (e.g., 'KB-1,ERR-1')")
-	createCmd.Flags().String("jira-deps", "", "Comma-separated task IDs for Jira 'blocks' links (e.g., 'KB-1,ERR-1')")
-	createCmd.Flags().String("deps", "", "Shorthand: sets BOTH sync-deps and jira-deps to the same value")
+	createCmd.Flags().String("deps", "", "Comma-separated task IDs for Jira 'blocks' links (e.g., 'KB-1,ERR-1')")
 	createCmd.Flags().StringP("output", "o", ".", "Output directory for task files")
 
 	// Mark required - errors ignored as flags are defined above
@@ -74,8 +72,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	jiraType, _ := cmd.Flags().GetString("type")
 	description, _ := cmd.Flags().GetString("description")
 	jiraProject, _ := cmd.Flags().GetString("jira-project")
-	syncDepsStr, _ := cmd.Flags().GetString("sync-deps")
-	jiraDepsStr, _ := cmd.Flags().GetString("jira-deps")
 	depsStr, _ := cmd.Flags().GetString("deps")
 	outputDir, _ := cmd.Flags().GetString("output")
 
@@ -85,15 +81,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Parse dependencies
-	// If --deps is set, use it for both; otherwise use individual flags
-	var syncDeps, jiraDeps []string
-	if depsStr != "" {
-		syncDeps = parseDeps(depsStr)
-		jiraDeps = parseDeps(depsStr)
-	} else {
-		syncDeps = parseDeps(syncDepsStr)
-		jiraDeps = parseDeps(jiraDepsStr)
-	}
+	jiraDeps := parseDeps(depsStr)
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -127,7 +115,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 			JiraURL:          "",
 			SyncStatus:       domain.SyncStatusPending,
 			JiraParent:       jiraParent,
-			SyncDependencies: syncDeps,
 			JiraDependencies: jiraDeps,
 			ContentHash:      "",
 			LastSynced:       "",
@@ -148,9 +135,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 	if jiraProject != "" {
 		fmt.Printf("  Jira-Project: %s\n", jiraProject)
-	}
-	if len(syncDeps) > 0 {
-		fmt.Printf("  Sync-Dependencies: %s\n", strings.Join(syncDeps, ", "))
 	}
 	if len(jiraDeps) > 0 {
 		fmt.Printf("  Jira-Dependencies: %s\n", strings.Join(jiraDeps, ", "))
