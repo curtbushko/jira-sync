@@ -26,7 +26,6 @@ type pullFlags struct {
 	tasksDir    string
 	dryRun      bool
 	skipConfirm bool
-	force       bool
 }
 
 // pullContext holds all the dependencies for pull operations.
@@ -44,6 +43,7 @@ This command fetches updates from Jira and applies them locally:
 - Updates jira-state from Jira status
 - Updates title from Jira summary
 - Updates description from Jira description
+- Updates jira-dependencies from Jira issue links
 
 Only tasks with a jira-number are processed.
 
@@ -52,8 +52,7 @@ Arguments:
 
 Example:
   jira-sync pull
-  jira-sync pull ./tasks/ --dry-run
-  jira-sync pull ./tasks/ --force  # Overwrite local changes`,
+  jira-sync pull ./tasks/ --dry-run`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runPull,
 }
@@ -63,7 +62,6 @@ func init() {
 
 	pullCmd.Flags().Bool("dry-run", false, "Show what would happen without making changes")
 	pullCmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompts")
-	pullCmd.Flags().Bool("force", false, "Overwrite local changes even if there are conflicts")
 }
 
 func runPull(cmd *cobra.Command, args []string) error {
@@ -73,7 +71,6 @@ func runPull(cmd *cobra.Command, args []string) error {
 		slog.String("tasks_dir", flags.tasksDir),
 		slog.Bool("dry_run", flags.dryRun),
 		slog.Bool("skip_confirm", flags.skipConfirm),
-		slog.Bool("force", flags.force),
 	)
 
 	repo := filesystem.NewFileTaskRepository()
@@ -93,7 +90,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 	printPullSummary(tasks)
 
 	if flags.dryRun {
-		return handlePullDryRun(cmd.Context(), tasks, flags)
+		return handlePullDryRun(cmd.Context(), tasks)
 	}
 
 	if !flags.skipConfirm {
@@ -108,7 +105,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return executePull(cmd.Context(), pullCtx, tasks, flags)
+	return executePull(cmd.Context(), pullCtx, tasks)
 }
 
 func parsePullFlags(cmd *cobra.Command, args []string) pullFlags {
@@ -119,13 +116,11 @@ func parsePullFlags(cmd *cobra.Command, args []string) pullFlags {
 
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	skipConfirm, _ := cmd.Flags().GetBool("yes")
-	force, _ := cmd.Flags().GetBool("force")
 
 	return pullFlags{
 		tasksDir:    tasksDir,
 		dryRun:      dryRun,
 		skipConfirm: skipConfirm,
-		force:       force,
 	}
 }
 
@@ -149,10 +144,6 @@ func loadPullableTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.Ta
 				slog.String("jira_key", task.Frontmatter.JiraNumber),
 			)
 			tasks = append(tasks, task)
-		} else {
-			slog.Debug("task has no jira number, skipping",
-				slog.String("task", task.TaskID()),
-			)
 		}
 	}
 
@@ -161,10 +152,10 @@ func loadPullableTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.Ta
 }
 
 func printPullSummary(tasks []*domain.TaskFile) {
-	fmt.Printf("Found %d tasks with Jira numbers to check for updates\n\n", len(tasks))
+	fmt.Printf("Found %d tasks with Jira numbers to sync\n\n", len(tasks))
 }
 
-func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullFlags) error {
+func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile) error {
 	slog.Debug("starting dry run", slog.Int("task_count", len(tasks)))
 	color.Yellow("Dry run - no changes will be made\n")
 
@@ -174,54 +165,24 @@ func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullF
 		return err
 	}
 
-	var opts []pull.Option
-	if flags.force {
-		slog.Debug("force option enabled")
-		opts = append(opts, pull.WithForce(true))
-	}
+	results := pullCtx.service.PullAll(ctx, tasks)
 
-	slog.Debug("pulling all tasks in dry run mode")
-	results := pullCtx.service.PullAll(ctx, tasks, opts...)
-
-	var updated, skipped, conflicts, errCount int
+	var synced, errCount int
 	for _, result := range results {
-		slog.Debug("dry run result",
-			slog.String("task", result.Task.TaskID()),
-			slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
-			slog.String("action", string(result.Action)),
-			slog.Any("fields", result.Fields),
-		)
-		switch result.Action {
-		case pull.ActionUpdated:
-			updated++
-			color.Green("  [WOULD UPDATE] %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-			for _, field := range result.Fields {
-				fmt.Printf("    - %s\n", field)
-			}
-		case pull.ActionConflict:
-			conflicts++
-			color.Yellow("  [CONFLICT] %s (%s) - both local and Jira changed", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-		case pull.ActionError:
+		if result.Error != nil {
 			errCount++
-			slog.Debug("dry run error",
-				slog.String("task", result.Task.TaskID()),
-				slog.String("error", result.Error.Error()),
-			)
 			color.Red("  [ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
-		case pull.ActionSkipped:
-			skipped++
+		} else if result.Task.Frontmatter.JiraNumber != "" {
+			synced++
+			color.Green("  [WOULD SYNC] %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
+			if len(result.Dependencies) > 0 {
+				fmt.Printf("    - dependencies: %v\n", result.Dependencies)
+			}
 		}
 	}
 
-	slog.Debug("dry run summary",
-		slog.Int("would_update", updated),
-		slog.Int("up_to_date", skipped),
-		slog.Int("conflicts", conflicts),
-		slog.Int("errors", errCount),
-	)
-
 	fmt.Println()
-	fmt.Printf("Summary: %d would update, %d up-to-date, %d conflicts, %d errors\n", updated, skipped, conflicts, errCount)
+	fmt.Printf("Summary: %d would sync, %d errors\n", synced, errCount)
 	return nil
 }
 
@@ -285,128 +246,70 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 	}, nil
 }
 
-func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.TaskFile, flags pullFlags) error {
+func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.TaskFile) error {
 	slog.Debug("starting pull execution", slog.Int("task_count", len(tasks)))
 	color.Cyan("Pulling updates from Jira...\n")
 
-	var opts []pull.Option
-	if flags.force {
-		slog.Debug("force option enabled for pull")
-		opts = append(opts, pull.WithForce(true))
-	}
-
-	results := pullCtx.service.PullAll(ctx, tasks, opts...)
+	results := pullCtx.service.PullAll(ctx, tasks)
 	slog.Debug("pull completed", slog.Int("result_count", len(results)))
 
-	var updated, skipped, conflicts, errCount int
+	var synced, errCount int
 	for _, result := range results {
-		// Check if dependencies changed (Jira differs from local, in either direction)
-		depsUpdated := result.DependencyResult != nil && result.DependencyResult.HasChanges
-
 		slog.Debug("processing pull result",
 			slog.String("task", result.Task.TaskID()),
 			slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
-			slog.String("action", string(result.Action)),
-			slog.Bool("has_dependency_result", result.DependencyResult != nil),
-			slog.Bool("deps_updated", depsUpdated),
+			slog.Bool("has_error", result.Error != nil),
+			slog.Any("dependencies", result.Dependencies),
 		)
 
-		if result.DependencyResult != nil {
-			slog.Debug("dependency result details",
-				slog.String("task", result.Task.TaskID()),
-				slog.Any("local_deps", result.DependencyResult.LocalDeps),
-				slog.Any("jira_deps", result.DependencyResult.JiraDeps),
-				slog.Bool("has_changes", result.DependencyResult.HasChanges),
-			)
-		}
-
-		switch result.Action {
-		case pull.ActionUpdated:
-			updated++
-			slog.Debug("writing updated task",
-				slog.String("task", result.Task.TaskID()),
-				slog.String("path", result.Task.Path),
-				slog.Any("fields", result.Fields),
-			)
-			if err := pullCtx.repo.WriteTask(result.Task); err != nil {
-				slog.Debug("failed to write task",
-					slog.String("task", result.Task.TaskID()),
-					slog.String("error", err.Error()),
-				)
-				color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
-				errCount++
-				continue
-			}
-			color.Green("[OK] Updated %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-			for _, field := range result.Fields {
-				fmt.Printf("    - %s\n", field)
-			}
-			if depsUpdated {
-				fmt.Printf("    - jira-dependencies\n")
-			}
-		case pull.ActionConflict:
-			conflicts++
-			slog.Debug("conflict detected",
-				slog.String("task", result.Task.TaskID()),
-				slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
-				slog.Any("fields", result.Fields),
-			)
-			color.Yellow("[CONFLICT] %s (%s) - use --force to overwrite local", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-		case pull.ActionError:
+		if result.Error != nil {
 			errCount++
 			slog.Debug("error during pull",
 				slog.String("task", result.Task.TaskID()),
-				slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
 				slog.String("error", result.Error.Error()),
 			)
 			color.Red("[ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
-		case pull.ActionSkipped:
-			// Even if content didn't change, write if dependencies were pulled from Jira
-			if depsUpdated {
-				updated++
-				slog.Debug("writing task with updated dependencies",
-					slog.String("task", result.Task.TaskID()),
-					slog.String("path", result.Task.Path),
-					slog.Any("jira_deps", result.DependencyResult.JiraDeps),
-				)
-				if err := pullCtx.repo.WriteTask(result.Task); err != nil {
-					slog.Debug("failed to write task",
-						slog.String("task", result.Task.TaskID()),
-						slog.String("error", err.Error()),
-					)
-					color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
-					errCount++
-					continue
-				}
-				color.Green("[OK] Updated %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-				fmt.Printf("    - jira-dependencies\n")
-			} else {
-				skipped++
-				slog.Debug("task skipped - no changes",
-					slog.String("task", result.Task.TaskID()),
-					slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
-				)
-			}
+			continue
+		}
+
+		// Skip tasks without Jira number (shouldn't happen, but be safe)
+		if result.Task.Frontmatter.JiraNumber == "" {
+			continue
+		}
+
+		// Write the updated task
+		slog.Debug("writing task",
+			slog.String("task", result.Task.TaskID()),
+			slog.String("path", result.Task.Path),
+		)
+		if err := pullCtx.repo.WriteTask(result.Task); err != nil {
+			slog.Debug("failed to write task",
+				slog.String("task", result.Task.TaskID()),
+				slog.String("error", err.Error()),
+			)
+			color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
+			errCount++
+			continue
+		}
+
+		synced++
+		color.Green("[OK] Synced %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
+		if len(result.Dependencies) > 0 {
+			fmt.Printf("    - dependencies: %v\n", result.Dependencies)
 		}
 	}
 
 	slog.Debug("pull execution summary",
-		slog.Int("updated", updated),
-		slog.Int("skipped", skipped),
-		slog.Int("conflicts", conflicts),
+		slog.Int("synced", synced),
 		slog.Int("errors", errCount),
 	)
 
 	fmt.Println()
-	if conflicts > 0 {
-		color.Yellow("Pull completed with conflicts: %d updated, %d up-to-date, %d conflicts, %d errors", updated, skipped, conflicts, errCount)
-		return nil
-	}
 	if errCount > 0 {
-		color.Red("Pull completed with errors: %d updated, %d up-to-date, %d errors", updated, skipped, errCount)
+		color.Red("Pull completed with errors: %d synced, %d errors", synced, errCount)
 		return nil
 	}
 
-	color.Green("[OK] Pull complete: %d updated, %d up-to-date", updated, skipped)
+	color.Green("[OK] Pull complete: %d synced", synced)
 	return nil
 }
