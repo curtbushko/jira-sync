@@ -20,10 +20,9 @@ type Result struct {
 
 // Service handles pulling from Jira to local files.
 type Service struct {
-	jira     ports.JiraClient
-	hasher   ports.HashComputer
+	jira        ports.JiraClient
+	hasher      ports.HashComputer
 	depDetector *DependencyDetector
-	allTasks []*domain.TaskFile
 }
 
 // NewService creates a new pull service.
@@ -34,12 +33,6 @@ func NewService(jira ports.JiraClient, hasher ports.HashComputer, linkType strin
 		hasher:      hasher,
 		depDetector: NewDependencyDetector(linkType),
 	}
-}
-
-// SetAllTasks sets the list of all tasks for dependency mapping.
-func (s *Service) SetAllTasks(tasks []*domain.TaskFile) {
-	slog.Debug("setting all tasks for dependency mapping", slog.Int("count", len(tasks)))
-	s.allTasks = tasks
 }
 
 // PullTask pulls a task from Jira and updates the local file.
@@ -79,19 +72,17 @@ func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile) *Result {
 
 	// Fetch and update dependencies
 	result := &Result{Task: task}
-	if s.allTasks != nil {
-		deps, err := s.syncDependencies(ctx, task)
-		if err != nil {
-			slog.Debug("failed to sync dependencies",
-				slog.String("task", task.TaskID()),
-				slog.String("error", err.Error()),
-			)
-			result.Error = err
-			return result
-		}
-		result.Dependencies = deps
-		result.UpdatedDeps = true
+	deps, err := s.syncDependencies(ctx, task)
+	if err != nil {
+		slog.Debug("failed to sync dependencies",
+			slog.String("task", task.TaskID()),
+			slog.String("error", err.Error()),
+		)
+		result.Error = err
+		return result
 	}
+	result.Dependencies = deps
+	result.UpdatedDeps = true
 
 	slog.Debug("pull task completed",
 		slog.String("task", task.TaskID()),
@@ -161,7 +152,7 @@ func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) (
 	)
 
 	// Extract dependencies
-	deps := s.depDetector.ExtractDependencies(task, jiraLinks, s.allTasks)
+	deps := s.depDetector.ExtractDependencies(task, jiraLinks)
 
 	// Update task
 	if len(deps) > 0 {

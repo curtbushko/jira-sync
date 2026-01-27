@@ -236,10 +236,6 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 	hasher := hashing.NewSHA256HashComputer()
 	service := pull.NewService(jiraClient, hasher, linkType)
 
-	// Set all tasks for dependency mapping
-	slog.Debug("setting all tasks for dependency mapping", slog.Int("task_count", len(allTasks)))
-	service.SetAllTasks(allTasks)
-
 	return &pullContext{
 		repo:    repo,
 		service: service,

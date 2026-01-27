@@ -26,11 +26,10 @@ func NewDependencyDetector(linkType string) *DependencyDetector {
 }
 
 // ExtractDependencies extracts dependencies from Jira issue links.
-// Returns the list of dependency task IDs (or Jira keys if no local task exists).
+// Returns the list of Jira issue keys that this task depends on.
 func (d *DependencyDetector) ExtractDependencies(
 	task *domain.TaskFile,
 	jiraLinks []ports.IssueLink,
-	allTasks []*domain.TaskFile,
 ) []string {
 	slog.Debug("extracting dependencies",
 		slog.String("task", task.TaskID()),
@@ -39,17 +38,6 @@ func (d *DependencyDetector) ExtractDependencies(
 		slog.Int("link_count", len(jiraLinks)),
 	)
 
-	// Build mapping from Jira key to task ID
-	jiraKeyToTaskID := make(map[string]string)
-	for _, t := range allTasks {
-		taskID := t.TaskID()
-		if taskID != "" && t.Frontmatter.JiraNumber != "" {
-			jiraKeyToTaskID[t.Frontmatter.JiraNumber] = taskID
-		}
-	}
-	slog.Debug("built jira key to task id mapping", slog.Int("mapping_count", len(jiraKeyToTaskID)))
-
-	// Extract dependency links - any link of the configured type with an InwardIssue
 	var deps []string
 
 	for i, link := range jiraLinks {
@@ -62,22 +50,11 @@ func (d *DependencyDetector) ExtractDependencies(
 		)
 
 		if link.Type == d.linkType && link.InwardIssue != "" {
-			// Convert Jira key to task ID, or use Jira key directly if no local task
-			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
-				slog.Debug("dependency link matched - mapped to task id",
-					slog.String("task", task.TaskID()),
-					slog.String("jira_key", link.InwardIssue),
-					slog.String("mapped_task_id", taskID),
-				)
-				deps = append(deps, taskID)
-			} else {
-				// No local task for this Jira issue - store Jira key directly
-				slog.Debug("dependency link matched - no local task, using jira key",
-					slog.String("task", task.TaskID()),
-					slog.String("jira_key", link.InwardIssue),
-				)
-				deps = append(deps, link.InwardIssue)
-			}
+			slog.Debug("dependency link matched",
+				slog.String("task", task.TaskID()),
+				slog.String("dependency", link.InwardIssue),
+			)
+			deps = append(deps, link.InwardIssue)
 		}
 	}
 

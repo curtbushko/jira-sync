@@ -81,12 +81,6 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 		},
 	}
 
-	allTasks := []*domain.TaskFile{
-		task,
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-102"}},
-		{Frontmatter: domain.Frontmatter{Title: "KB-3: Task 3", JiraNumber: "GUARD-103"}},
-	}
-
 	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
 		return &ports.Issue{
 			Key:         "GUARD-101",
@@ -104,13 +98,12 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 	}
 
 	svc := NewService(mockJira, hasher, "Blocking")
-	svc.SetAllTasks(allTasks)
 
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
-	assert.ElementsMatch(t, []string{"KB-2", "KB-3"}, task.Frontmatter.JiraDependencies)
-	assert.ElementsMatch(t, []string{"KB-2", "KB-3"}, result.Dependencies)
+	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, task.Frontmatter.JiraDependencies)
+	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, result.Dependencies)
 	assert.True(t, result.UpdatedDeps)
 }
 
