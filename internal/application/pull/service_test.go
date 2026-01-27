@@ -388,7 +388,7 @@ func TestPullService_PullTask_DoesNotPushDependenciesToJira(t *testing.T) {
 
 	// Pull operation should update local to match Jira (which has no deps)
 	// Local should be cleared because Jira is authoritative
-	assert.Nil(t, task.Frontmatter.JiraDependencies,
+	assert.Empty(t, task.Frontmatter.JiraDependencies,
 		"Local dependencies should be cleared to match Jira")
 
 	// CRITICAL: Pull should NEVER create links in Jira

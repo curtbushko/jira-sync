@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
@@ -156,6 +157,15 @@ func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*
 	svc := push.NewService(repo, nil, hasher)
 	categorized := svc.CategorizeTasks(tasks)
 
+	// Topologically sort pending tasks by sync-dependencies
+	if len(categorized.Pending) > 0 {
+		sorted, err := push.TopologicalSort(categorized.Pending, tasks)
+		if err != nil {
+			return nil, nil, fmt.Errorf("dependency error: %w", err)
+		}
+		categorized.Pending = sorted
+	}
+
 	return tasks, categorized, nil
 }
 
@@ -283,8 +293,10 @@ func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushCon
 
 func savePushLinkedTasks(pushCtx *pushContext, created []*domain.TaskFile, allTasks []*domain.TaskFile) error {
 	taskMap := buildPushTaskMap(allTasks)
+	now := time.Now().UTC().Format(time.RFC3339)
 
 	for _, task := range created {
+		task.Frontmatter.LastSynced = now
 		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
@@ -320,7 +332,9 @@ func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categoriz
 		return fmt.Errorf("update tickets: %w", err)
 	}
 
+	now := time.Now().UTC().Format(time.RFC3339)
 	for _, task := range categorized.NeedsUpdate {
+		task.Frontmatter.LastSynced = now
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}

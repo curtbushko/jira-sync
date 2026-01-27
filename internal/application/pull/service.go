@@ -196,12 +196,14 @@ func (s *Service) pullDependencies(ctx context.Context, task *domain.TaskFile) (
 	depResult := s.detector.DetectDependencies(task, jiraLinks, s.allTasks)
 
 	// Update local task with Jira dependencies (pull direction only)
-	// Jira is authoritative - local file should reflect what Jira has
-	if len(depResult.JiraDeps) > 0 {
-		task.Frontmatter.JiraDependencies = depResult.JiraDeps
-	} else {
-		// Clear local deps if Jira has none
-		task.Frontmatter.JiraDependencies = nil
+	// Only update if there are actual changes to avoid clearing unpushed local deps
+	if depResult.HasChanges {
+		if len(depResult.JiraDeps) > 0 {
+			task.Frontmatter.JiraDependencies = depResult.JiraDeps
+		} else {
+			// Set to empty slice (not nil) when Jira has no deps
+			task.Frontmatter.JiraDependencies = []string{}
+		}
 	}
 
 	// NOTE: We do NOT create/delete links in Jira here.
