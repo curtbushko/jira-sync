@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
@@ -22,7 +23,7 @@ func init() {
 	rootCmd.AddCommand(debugCmd)
 }
 
-func runDebug(cmd *cobra.Command, args []string) error {
+func runDebug(_ *cobra.Command, args []string) error {
 	issueKey := args[0]
 
 	jiraURL := viper.GetString("jira.url")
@@ -30,7 +31,7 @@ func runDebug(cmd *cobra.Command, args []string) error {
 	jiraToken := viper.GetString("token")
 
 	if jiraURL == "" || jiraUser == "" || jiraToken == "" {
-		return fmt.Errorf("jira.url, jira.user, and token are required")
+		return errors.New("jira.url, jira.user, and token are required")
 	}
 
 	client, err := jira.NewClient(jiraURL, jiraUser, jiraToken)

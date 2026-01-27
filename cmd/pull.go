@@ -197,7 +197,7 @@ func confirmPull(taskCount int) bool {
 	return response == "y" || response == "Y"
 }
 
-func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (*pullContext, error) {
+func createPullContext(repo ports.TaskRepository, _ []*domain.TaskFile) (*pullContext, error) {
 	slog.Debug("creating pull context")
 
 	jiraURL := viper.GetString("jira.url")
