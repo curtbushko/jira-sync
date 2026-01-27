@@ -186,9 +186,12 @@ func (d *ChangeDetector) DetectDependencies(
 
 	for _, link := range jiraLinks {
 		if link.Type == d.linkType && link.InwardIssue != "" {
-			// Convert Jira key to task ID
+			// Convert Jira key to task ID, or use Jira key directly if no local task
 			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
 				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
+			} else {
+				// No local task for this Jira issue - store Jira key directly
+				jiraDepTaskIDs = append(jiraDepTaskIDs, link.InwardIssue)
 			}
 		}
 	}
