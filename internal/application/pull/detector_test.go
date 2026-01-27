@@ -204,9 +204,10 @@ func TestDetectDependencies_InSync(t *testing.T) {
 	}
 
 	// Jira links match local dependencies
+	// When querying GUARD-123's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
-		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: ""},
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
@@ -232,9 +233,10 @@ func TestDetectDependencies_JiraHasMore(t *testing.T) {
 	}
 
 	// Jira has both KB-2 and KB-3
+	// When querying GUARD-123's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
-		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: ""},
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
@@ -262,8 +264,9 @@ func TestDetectDependencies_LocalHasMore(t *testing.T) {
 	}
 
 	// Jira only has KB-2
+	// When querying GUARD-123's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
@@ -290,9 +293,10 @@ func TestDetectDependencies_IgnoresOtherLinkTypes(t *testing.T) {
 	}
 
 	// Jira has a "Blocks" link and a "Relates" link (should ignore "Relates")
+	// When querying GUARD-123's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	jiraLinks := []ports.IssueLink{
-		{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
-		{ID: "link-2", Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
+		{ID: "link-1", Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{ID: "link-2", Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: ""},
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
@@ -337,8 +341,9 @@ func TestDetectDependencies_WikiLinkFormat(t *testing.T) {
 		{Frontmatter: domain.Frontmatter{Title: "KB-2: Task 2", JiraNumber: "GUARD-101"}},
 	}
 
+	// When querying GUARD-123's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
+		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")

@@ -181,13 +181,17 @@ func (d *ChangeDetector) DetectDependencies(
 	// Get local dependency task IDs
 	localDepIDs := task.JiraDependencyIDs()
 
-	// Extract dependency links where this task is blocked (outward)
-	// A link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123
+	// Extract dependency links where this task is blocked by another issue.
+	// When querying an issue's links, Jira returns:
+	// - InwardIssue set (OutwardIssue empty): the InwardIssue blocks us
+	// - OutwardIssue set (InwardIssue empty): we block the OutwardIssue
+	// We want the first case - issues that block us (our dependencies).
 	var jiraDepTaskIDs []string
 
 	for _, link := range jiraLinks {
-		// Only consider configured link type where this task is the blocked (outward) issue
-		if link.Type == d.linkType && link.OutwardIssue == task.Frontmatter.JiraNumber && link.InwardIssue != "" {
+		// Only consider configured link type where InwardIssue is set (blocker)
+		// and OutwardIssue is empty (meaning we are the blocked issue)
+		if link.Type == d.linkType && link.InwardIssue != "" && link.OutwardIssue == "" {
 			// Convert Jira key to task ID
 			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
 				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)

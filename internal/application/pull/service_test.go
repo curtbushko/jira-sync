@@ -299,19 +299,20 @@ func TestPullService_PullTask_PullsDependenciesFromJira(t *testing.T) {
 
 	// Mock GetIssueLinks - Jira HAS dependencies that local doesn't have
 	// GUARD-102 and GUARD-103 block GUARD-101
+	// When querying GUARD-101's links, Jira returns InwardIssue (blocker) with OutwardIssue empty
 	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
 		return []ports.IssueLink{
 			{
 				ID:           "link-1",
 				Type:         "Blocks",
 				InwardIssue:  "GUARD-102", // GUARD-102 blocks GUARD-101
-				OutwardIssue: "GUARD-101",
+				OutwardIssue: "",
 			},
 			{
 				ID:           "link-2",
 				Type:         "Blocks",
 				InwardIssue:  "GUARD-103", // GUARD-103 blocks GUARD-101
-				OutwardIssue: "GUARD-101",
+				OutwardIssue: "",
 			},
 		}, nil
 	}
