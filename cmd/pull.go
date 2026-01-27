@@ -236,8 +236,8 @@ func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.Task
 
 	var updated, skipped, conflicts, errors int
 	for _, result := range results {
-		// Check if dependencies were updated (even if content wasn't)
-		depsUpdated := result.DependencyResult != nil && len(result.DependencyResult.JiraDeps) > 0
+		// Check if dependencies changed (Jira differs from local, in either direction)
+		depsUpdated := result.DependencyResult != nil && result.DependencyResult.HasChanges
 
 		switch result.Action {
 		case pull.ActionUpdated:
