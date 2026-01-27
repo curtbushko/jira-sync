@@ -32,10 +32,23 @@ install: ## Install the binary using go install
 	@echo "$(DATELOG) Installing $(BINARY)"
 	GOOS=$(OS) GOARCH=$(ARCH) go install
 
-.PHONY: lint
-lint: ## Run golangci-lint
-	@echo "$(DATELOG) Linting plugin"
+.PHONY: golangci-lint
+golangci-lint: ## Run golangci-lint
+	@echo "$(DATELOG) Running golangci-lint"
 	golangci-lint run -v -c $(CURDIR)/.golangci.yml
+
+.PHONY: arch-lint
+arch-lint: ## Run go-arch-lint
+	@echo "$(DATELOG) Running go-arch-lint"
+	go-arch-lint check
+
+.PHONY: ai-lint
+ai-lint: ## Run go-ai-lint
+	@echo "$(DATELOG) Running go-ai-lint"
+	go-ai-lint ./...
+
+.PHONY: lint
+lint: golangci-lint arch-lint ai-lint ## Run all linters
 
 .PHONY: test
 test: ## Run go tests

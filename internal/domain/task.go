@@ -43,15 +43,15 @@ func (t *TaskFile) TaskID() string {
 	return t.Frontmatter.Title
 }
 
-// GetSyncDependencyIDs extracts task IDs from sync-dependencies.
+// SyncDependencyIDs extracts task IDs from sync-dependencies.
 // Handles both wiki link format and legacy plain task IDs.
-func (t *TaskFile) GetSyncDependencyIDs() []string {
+func (t *TaskFile) SyncDependencyIDs() []string {
 	return extractDependencyIDs(t.Frontmatter.SyncDependencies)
 }
 
-// GetJiraDependencyIDs extracts task IDs from jira-dependencies.
+// JiraDependencyIDs extracts task IDs from jira-dependencies.
 // Handles both wiki link format and legacy plain task IDs.
-func (t *TaskFile) GetJiraDependencyIDs() []string {
+func (t *TaskFile) JiraDependencyIDs() []string {
 	return extractDependencyIDs(t.Frontmatter.JiraDependencies)
 }
 

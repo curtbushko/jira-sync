@@ -47,7 +47,7 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 	// Process dependencies
 	for _, task := range pending {
 		taskID := task.TaskID()
-		depIDs := task.GetSyncDependencyIDs()
+		depIDs := task.SyncDependencyIDs()
 
 		for _, depID := range depIDs {
 			// Check if dependency exists

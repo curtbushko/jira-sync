@@ -79,14 +79,27 @@ type IssueLink struct {
 	OutwardIssue string // Outward issue key (e.g., blocker)
 }
 
-// JiraClient handles all Jira API operations.
-type JiraClient interface {
+// IssueReader handles reading Jira issues.
+type IssueReader interface {
+	// GetIssue fetches an issue by key.
+	GetIssue(ctx context.Context, key string) (*Issue, error)
+
+	// GetIssueWithLinks fetches an issue with expanded links for export.
+	// Returns all fields needed to create a local task file.
+	GetIssueWithLinks(ctx context.Context, key string) (*IssueWithLinks, error)
+}
+
+// IssueWriter handles creating and updating Jira issues.
+type IssueWriter interface {
 	// CreateIssue creates a new issue and returns the created issue with key.
 	CreateIssue(ctx context.Context, req CreateIssueRequest) (*Issue, error)
 
 	// UpdateIssue updates an existing issue.
 	UpdateIssue(ctx context.Context, key string, req UpdateIssueRequest) error
+}
 
+// LinkManager handles Jira issue link operations.
+type LinkManager interface {
 	// CreateLink creates a dependency link between two issues.
 	// inward is the blocked issue, outward is the blocker.
 	CreateLink(ctx context.Context, inward, outward, linkType string) error
@@ -96,19 +109,24 @@ type JiraClient interface {
 
 	// DeleteLink removes an issue link by ID.
 	DeleteLink(ctx context.Context, linkID string) error
+}
 
-	// GetIssue fetches an issue by key.
-	GetIssue(ctx context.Context, key string) (*Issue, error)
-
-	// GetIssueWithLinks fetches an issue with expanded links for export.
-	// Returns all fields needed to create a local task file.
-	GetIssueWithLinks(ctx context.Context, key string) (*IssueWithLinks, error)
-
+// TransitionManager handles Jira workflow transitions.
+type TransitionManager interface {
 	// GetTransitions returns available transitions for an issue.
 	GetTransitions(ctx context.Context, key string) ([]Transition, error)
 
 	// DoTransition performs a workflow transition on an issue.
 	DoTransition(ctx context.Context, key, transitionID string) error
+}
+
+// JiraClient handles all Jira API operations.
+// It composes smaller interfaces for better interface segregation.
+type JiraClient interface {
+	IssueReader
+	IssueWriter
+	LinkManager
+	TransitionManager
 
 	// BaseURL returns the Jira instance base URL.
 	BaseURL() string

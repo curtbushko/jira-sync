@@ -15,6 +15,20 @@
           overlays = [ self.overlays.default ];
         };
       });
+
+      # Build go-ai-lint from source
+      go-ai-lint = { pkgs }: pkgs.buildGoModule {
+        pname = "go-ai-lint";
+        version = "1.0.0";
+        src = pkgs.fetchFromGitHub {
+          owner = "curtbushko";
+          repo = "go-ai-lint";
+          rev = "v1.0.0";
+          sha256 = "sha256-y2G7dTZqM/rEQaALu54bHigBeO1xxRIblBJ7QxOffW4=";
+        };
+        subPackages = [ "cmd/go-ai-lint" ];
+        vendorHash = null;
+      };
     in
     {
       overlays.default = final: prev: {
@@ -29,6 +43,7 @@
             go
             gotools
             golangci-lint
+            (go-ai-lint { inherit pkgs; })
           ];
         };
       });

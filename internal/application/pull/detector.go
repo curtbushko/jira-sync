@@ -175,7 +175,7 @@ func (d *ChangeDetector) DetectDependencies(
 	}
 
 	// Get local dependency task IDs
-	localDepIDs := task.GetJiraDependencyIDs()
+	localDepIDs := task.JiraDependencyIDs()
 
 	// Extract Jira "Blocks" links where this task is blocked (outward)
 	// A "Blocks" link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123

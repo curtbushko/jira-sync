@@ -142,7 +142,7 @@ func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile
 	// Create links for each task based on jira-dependencies
 	for _, task := range tasks {
 		// Extract task IDs from jira-dependencies (handles wiki link format)
-		depIDs := task.GetJiraDependencyIDs()
+		depIDs := task.JiraDependencyIDs()
 		if len(depIDs) == 0 {
 			task.Frontmatter.SyncStatus = domain.SyncStatusLinked
 			continue

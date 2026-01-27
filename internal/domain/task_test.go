@@ -51,7 +51,7 @@ func TestTaskFile_TaskID(t *testing.T) {
 	}
 }
 
-func TestTaskFile_GetSyncDependencyIDs(t *testing.T) {
+func TestTaskFile_SyncDependencyIDs(t *testing.T) {
 	tests := []struct {
 		name     string
 		deps     []string
@@ -101,12 +101,12 @@ func TestTaskFile_GetSyncDependencyIDs(t *testing.T) {
 					SyncDependencies: testCase.deps,
 				},
 			}
-			assert.Equal(t, testCase.expected, task.GetSyncDependencyIDs())
+			assert.Equal(t, testCase.expected, task.SyncDependencyIDs())
 		})
 	}
 }
 
-func TestTaskFile_GetJiraDependencyIDs(t *testing.T) {
+func TestTaskFile_JiraDependencyIDs(t *testing.T) {
 	tests := []struct {
 		name     string
 		deps     []string
@@ -146,7 +146,7 @@ func TestTaskFile_GetJiraDependencyIDs(t *testing.T) {
 					JiraDependencies: testCase.deps,
 				},
 			}
-			assert.Equal(t, testCase.expected, task.GetJiraDependencyIDs())
+			assert.Equal(t, testCase.expected, task.JiraDependencyIDs())
 		})
 	}
 }

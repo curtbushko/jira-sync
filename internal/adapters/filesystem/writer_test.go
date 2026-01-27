@@ -196,8 +196,8 @@ func hasProperFrontmatterDelimiters(content string) bool {
 func splitLines(content string) []string {
 	var lines []string
 	start := 0
-	for idx := 0; idx < len(content); idx++ {
-		if content[idx] == '\n' {
+	for idx, char := range content {
+		if char == '\n' {
 			lines = append(lines, content[start:idx])
 			start = idx + 1
 		}

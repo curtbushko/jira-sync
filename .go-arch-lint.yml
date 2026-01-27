@@ -25,11 +25,11 @@ components:
     in: adapters/hashing/**
 
   # APPLICATION LAYER: Services/Use Cases
-  sync:
-    in: application/sync/**
+  pull:
+    in: application/pull/**
 
-  fullsync:
-    in: application/fullsync/**
+  push:
+    in: application/push/**
 
   export:
     in: application/export/**
@@ -60,11 +60,11 @@ commonComponents:
 # Dependency rules - defines allowed import relationships
 deps:
   # Application services implement business logic using ports
-  sync:
+  pull:
     mayDependOn:
       - ports
 
-  fullsync:
+  push:
     mayDependOn:
       - ports
 
