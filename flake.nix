@@ -27,7 +27,7 @@
           sha256 = "sha256-y2G7dTZqM/rEQaALu54bHigBeO1xxRIblBJ7QxOffW4=";
         };
         subPackages = [ "cmd/go-ai-lint" ];
-        vendorHash = null;
+        vendorHash = "sha256-zkXyXTEnMmBZnvzoq0UWKgzWZlyNRyQZCYAv+huZo0I=";
       };
     in
     {
