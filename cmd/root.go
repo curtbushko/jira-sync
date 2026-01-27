@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -11,6 +12,7 @@ import (
 )
 
 var cfgFile string
+var debugMode bool
 
 var rootCmd = &cobra.Command{
 	Use:   "jira-sync",
@@ -24,6 +26,18 @@ Commands:
   create    Create a new task file
   push      Push local changes to Jira
   pull      Pull Jira changes to local files`,
+	PersistentPreRun: func(_ *cobra.Command, _ []string) {
+		setupLogging()
+	},
+}
+
+func setupLogging() {
+	level := slog.LevelInfo
+	if debugMode {
+		level = slog.LevelDebug
+	}
+	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})
+	slog.SetDefault(slog.New(handler))
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -40,6 +54,8 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
 		"config file (default is $HOME/.jira-sync.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false,
+		"Enable debug logging")
 
 	// Jira connection flags (can be overridden by env vars)
 	rootCmd.PersistentFlags().String("jira-url", "", "Jira instance URL")

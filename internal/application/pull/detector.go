@@ -2,6 +2,7 @@
 package pull
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
@@ -42,30 +43,58 @@ func NewChangeDetector(hasher ports.HashComputer, linkType string) *ChangeDetect
 	if linkType == "" {
 		linkType = LinkTypeBlocks
 	}
+	slog.Debug("creating change detector", slog.String("link_type", linkType))
 	return &ChangeDetector{hasher: hasher, linkType: linkType}
 }
 
 // Detect compares a local task with a Jira issue and returns the change result.
 func (d *ChangeDetector) Detect(task *domain.TaskFile, jiraIssue *ports.Issue) ChangeResult {
+	slog.Debug("detecting changes",
+		slog.String("task", task.TaskID()),
+		slog.String("jira_key", task.Frontmatter.JiraNumber),
+	)
+
 	localChanged := d.hasLocalChanges(task)
 	jiraChanged, changedFields := d.hasJiraChanges(task, jiraIssue)
 
+	slog.Debug("change detection results",
+		slog.String("task", task.TaskID()),
+		slog.Bool("local_changed", localChanged),
+		slog.Bool("jira_changed", jiraChanged),
+		slog.Any("changed_fields", changedFields),
+	)
+
 	// Both changed = conflict
 	if localChanged && jiraChanged {
+		slog.Debug("conflict detected - both local and jira changed",
+			slog.String("task", task.TaskID()),
+		)
 		return ChangeResult{Type: ChangeTypeConflict, Fields: changedFields}
 	}
 
 	// Only local changed = push to Jira
 	if localChanged {
-		return ChangeResult{Type: ChangeTypeLocalToJira, Fields: d.getLocalChangedFields(task, jiraIssue)}
+		localFields := d.getLocalChangedFields(task, jiraIssue)
+		slog.Debug("local changes detected - should push to jira",
+			slog.String("task", task.TaskID()),
+			slog.Any("fields", localFields),
+		)
+		return ChangeResult{Type: ChangeTypeLocalToJira, Fields: localFields}
 	}
 
 	// Only Jira changed = pull to local
 	if jiraChanged {
+		slog.Debug("jira changes detected - should pull to local",
+			slog.String("task", task.TaskID()),
+			slog.Any("fields", changedFields),
+		)
 		return ChangeResult{Type: ChangeTypeJiraToLocal, Fields: changedFields}
 	}
 
 	// No changes
+	slog.Debug("no changes detected",
+		slog.String("task", task.TaskID()),
+	)
 	return ChangeResult{Type: ChangeTypeNone}
 }
 
@@ -74,12 +103,24 @@ func (d *ChangeDetector) hasLocalChanges(task *domain.TaskFile) bool {
 	// If never synced and has content hash, it's been modified
 	if task.Frontmatter.ContentHash == "" {
 		// Never synced - consider it as changed if there's content
-		return task.Description != "" || task.Frontmatter.Title != ""
+		hasContent := task.Description != "" || task.Frontmatter.Title != ""
+		slog.Debug("local changes check - never synced",
+			slog.String("task", task.TaskID()),
+			slog.Bool("has_content", hasContent),
+		)
+		return hasContent
 	}
 
 	// Compare current hash with stored hash
 	currentHash := d.hasher.ComputeHash(task)
-	return currentHash != task.Frontmatter.ContentHash
+	hashChanged := currentHash != task.Frontmatter.ContentHash
+	slog.Debug("local changes check - comparing hashes",
+		slog.String("task", task.TaskID()),
+		slog.String("stored_hash", task.Frontmatter.ContentHash),
+		slog.String("current_hash", currentHash),
+		slog.Bool("changed", hashChanged),
+	)
+	return hashChanged
 }
 
 // hasJiraChanges checks if the Jira issue has changed since last sync.
@@ -90,14 +131,31 @@ func (d *ChangeDetector) hasJiraChanges(task *domain.TaskFile, jiraIssue *ports.
 	// Check if Jira was updated after last sync
 	jiraUpdatedAfterSync := jiraIssue.Updated.After(lastSynced)
 
+	slog.Debug("jira changes check - timestamps",
+		slog.String("task", task.TaskID()),
+		slog.String("last_synced_raw", task.Frontmatter.LastSynced),
+		slog.Time("last_synced", lastSynced),
+		slog.Time("jira_updated", jiraIssue.Updated),
+		slog.Bool("jira_updated_after_sync", jiraUpdatedAfterSync),
+	)
+
 	// If Jira not updated and we have a valid last sync time, no changes
 	if !jiraUpdatedAfterSync && !lastSynced.IsZero() {
+		slog.Debug("jira changes check - no changes (jira not updated after sync)",
+			slog.String("task", task.TaskID()),
+		)
 		return false, nil
 	}
 
 	// Check which fields differ
 	changedFields := d.compareJiraFields(task, jiraIssue)
-	return len(changedFields) > 0, changedFields
+	hasChanges := len(changedFields) > 0
+	slog.Debug("jira changes check - field comparison",
+		slog.String("task", task.TaskID()),
+		slog.Bool("has_changes", hasChanges),
+		slog.Any("changed_fields", changedFields),
+	)
+	return hasChanges, changedFields
 }
 
 // compareJiraFields compares Jira issue fields with local task.
@@ -106,16 +164,31 @@ func (d *ChangeDetector) compareJiraFields(task *domain.TaskFile, jiraIssue *por
 
 	// Check title (summary)
 	if jiraIssue.Summary != task.Frontmatter.Title {
+		slog.Debug("field differs: title",
+			slog.String("task", task.TaskID()),
+			slog.String("local", task.Frontmatter.Title),
+			slog.String("jira", jiraIssue.Summary),
+		)
 		changedFields = append(changedFields, "title")
 	}
 
 	// Check description
 	if jiraIssue.Description != task.Description {
+		slog.Debug("field differs: description",
+			slog.String("task", task.TaskID()),
+			slog.Int("local_len", len(task.Description)),
+			slog.Int("jira_len", len(jiraIssue.Description)),
+		)
 		changedFields = append(changedFields, "description")
 	}
 
 	// Check status
 	if jiraIssue.Status != "" && jiraIssue.Status != task.Frontmatter.JiraState {
+		slog.Debug("field differs: status",
+			slog.String("task", task.TaskID()),
+			slog.String("local", task.Frontmatter.JiraState),
+			slog.String("jira", jiraIssue.Status),
+		)
 		changedFields = append(changedFields, "status")
 	}
 
@@ -169,6 +242,13 @@ func (d *ChangeDetector) DetectDependencies(
 	jiraLinks []ports.IssueLink,
 	allTasks []*domain.TaskFile,
 ) DependencyPullResult {
+	slog.Debug("detecting dependencies",
+		slog.String("task", task.TaskID()),
+		slog.String("jira_key", task.Frontmatter.JiraNumber),
+		slog.String("link_type", d.linkType),
+		slog.Int("link_count", len(jiraLinks)),
+	)
+
 	// Build mapping from Jira key to task ID
 	jiraKeyToTaskID := make(map[string]string)
 	for _, t := range allTasks {
@@ -177,20 +257,48 @@ func (d *ChangeDetector) DetectDependencies(
 			jiraKeyToTaskID[t.Frontmatter.JiraNumber] = taskID
 		}
 	}
+	slog.Debug("built jira key to task id mapping", slog.Int("mapping_count", len(jiraKeyToTaskID)))
 
 	// Get local dependency task IDs
 	localDepIDs := task.JiraDependencyIDs()
+	slog.Debug("local dependency ids",
+		slog.String("task", task.TaskID()),
+		slog.Any("local_deps", localDepIDs),
+	)
 
 	// Extract dependency links - any link of the configured type with an InwardIssue
 	var jiraDepTaskIDs []string
 
-	for _, link := range jiraLinks {
+	slog.Debug("scanning jira links for dependencies",
+		slog.String("task", task.TaskID()),
+		slog.String("link_type", d.linkType),
+		slog.Int("link_count", len(jiraLinks)),
+	)
+
+	for i, link := range jiraLinks {
+		slog.Debug("examining jira link",
+			slog.String("task", task.TaskID()),
+			slog.Int("link_index", i),
+			slog.String("type", link.Type),
+			slog.String("inward_issue", link.InwardIssue),
+			slog.String("outward_issue", link.OutwardIssue),
+		)
+
 		if link.Type == d.linkType && link.InwardIssue != "" {
 			// Convert Jira key to task ID, or use Jira key directly if no local task
 			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
+				slog.Debug("dependency link matched - mapped to task id",
+					slog.String("task", task.TaskID()),
+					slog.String("jira_key", link.InwardIssue),
+					slog.String("mapped_task_id", taskID),
+				)
 				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)
 			} else {
 				// No local task for this Jira issue - store Jira key directly
+				slog.Debug("dependency link matched - no local task, using jira key",
+					slog.String("task", task.TaskID()),
+					slog.String("jira_key", link.InwardIssue),
+				)
 				jiraDepTaskIDs = append(jiraDepTaskIDs, link.InwardIssue)
 			}
 		}
@@ -198,6 +306,13 @@ func (d *ChangeDetector) DetectDependencies(
 
 	// Check if there's a difference
 	hasChanges := !stringSlicesEqual(localDepIDs, jiraDepTaskIDs)
+
+	slog.Debug("dependency detection complete",
+		slog.String("task", task.TaskID()),
+		slog.Bool("has_changes", hasChanges),
+		slog.Any("local_deps", localDepIDs),
+		slog.Any("jira_deps", jiraDepTaskIDs),
+	)
 
 	return DependencyPullResult{
 		HasChanges: hasChanges,

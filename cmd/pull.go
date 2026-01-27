@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -68,17 +69,27 @@ func init() {
 func runPull(cmd *cobra.Command, args []string) error {
 	flags := parsePullFlags(cmd, args)
 
+	slog.Debug("pull command started",
+		slog.String("tasks_dir", flags.tasksDir),
+		slog.Bool("dry_run", flags.dryRun),
+		slog.Bool("skip_confirm", flags.skipConfirm),
+		slog.Bool("force", flags.force),
+	)
+
 	repo := filesystem.NewFileTaskRepository()
 	tasks, err := loadPullableTasks(flags.tasksDir, repo)
 	if err != nil {
+		slog.Debug("failed to load pullable tasks", slog.String("error", err.Error()))
 		return err
 	}
 
 	if len(tasks) == 0 {
+		slog.Debug("no tasks with jira numbers found")
 		color.Yellow("No tasks with Jira numbers found")
 		return nil
 	}
 
+	slog.Debug("found pullable tasks", slog.Int("count", len(tasks)))
 	printPullSummary(tasks)
 
 	if flags.dryRun {
@@ -119,6 +130,7 @@ func parsePullFlags(cmd *cobra.Command, args []string) pullFlags {
 }
 
 func loadPullableTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, error) {
+	slog.Debug("scanning directory for tasks", slog.String("tasks_dir", tasksDir))
 	color.Cyan("Scanning %s...\n", tasksDir)
 
 	allTasks, err := repo.ListTasks(tasksDir)
@@ -126,14 +138,25 @@ func loadPullableTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.Ta
 		return nil, fmt.Errorf("parse tasks: %w", err)
 	}
 
+	slog.Debug("found total tasks", slog.Int("count", len(allTasks)))
+
 	// Filter to only tasks with Jira numbers
 	var tasks []*domain.TaskFile
 	for _, task := range allTasks {
 		if task.Frontmatter.JiraNumber != "" {
+			slog.Debug("task has jira number",
+				slog.String("task", task.TaskID()),
+				slog.String("jira_key", task.Frontmatter.JiraNumber),
+			)
 			tasks = append(tasks, task)
+		} else {
+			slog.Debug("task has no jira number, skipping",
+				slog.String("task", task.TaskID()),
+			)
 		}
 	}
 
+	slog.Debug("filtered to pullable tasks", slog.Int("count", len(tasks)))
 	return tasks, nil
 }
 
@@ -142,22 +165,32 @@ func printPullSummary(tasks []*domain.TaskFile) {
 }
 
 func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullFlags) error {
+	slog.Debug("starting dry run", slog.Int("task_count", len(tasks)))
 	color.Yellow("Dry run - no changes will be made\n")
 
 	pullCtx, err := createPullContext(nil, tasks)
 	if err != nil {
+		slog.Debug("failed to create pull context", slog.String("error", err.Error()))
 		return err
 	}
 
 	var opts []pull.Option
 	if flags.force {
+		slog.Debug("force option enabled")
 		opts = append(opts, pull.WithForce(true))
 	}
 
+	slog.Debug("pulling all tasks in dry run mode")
 	results := pullCtx.service.PullAll(ctx, tasks, opts...)
 
-	var updated, skipped, conflicts, errors int
+	var updated, skipped, conflicts, errCount int
 	for _, result := range results {
+		slog.Debug("dry run result",
+			slog.String("task", result.Task.TaskID()),
+			slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
+			slog.String("action", string(result.Action)),
+			slog.Any("fields", result.Fields),
+		)
 		switch result.Action {
 		case pull.ActionUpdated:
 			updated++
@@ -169,15 +202,26 @@ func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile, flags pullF
 			conflicts++
 			color.Yellow("  [CONFLICT] %s (%s) - both local and Jira changed", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
 		case pull.ActionError:
-			errors++
+			errCount++
+			slog.Debug("dry run error",
+				slog.String("task", result.Task.TaskID()),
+				slog.String("error", result.Error.Error()),
+			)
 			color.Red("  [ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
 		case pull.ActionSkipped:
 			skipped++
 		}
 	}
 
+	slog.Debug("dry run summary",
+		slog.Int("would_update", updated),
+		slog.Int("up_to_date", skipped),
+		slog.Int("conflicts", conflicts),
+		slog.Int("errors", errCount),
+	)
+
 	fmt.Println()
-	fmt.Printf("Summary: %d would update, %d up-to-date, %d conflicts, %d errors\n", updated, skipped, conflicts, errors)
+	fmt.Printf("Summary: %d would update, %d up-to-date, %d conflicts, %d errors\n", updated, skipped, conflicts, errCount)
 	return nil
 }
 
@@ -193,9 +237,17 @@ func confirmPull(taskCount int) bool {
 }
 
 func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (*pullContext, error) {
+	slog.Debug("creating pull context")
+
 	jiraURL := viper.GetString("jira.url")
 	jiraUser := viper.GetString("jira.user")
 	jiraToken := viper.GetString("token")
+
+	slog.Debug("jira config",
+		slog.String("jira_url", jiraURL),
+		slog.String("jira_user", jiraUser),
+		slog.Bool("has_token", jiraToken != ""),
+	)
 
 	if jiraURL == "" {
 		return nil, errJiraURLRequired
@@ -209,6 +261,7 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 
 	jiraClient, err := jira.NewClient(jiraURL, jiraUser, jiraToken)
 	if err != nil {
+		slog.Debug("failed to create jira client", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("create jira client: %w", err)
 	}
 
@@ -217,11 +270,13 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 	if linkType == "" {
 		linkType = "Blocks"
 	}
+	slog.Debug("using link type for dependencies", slog.String("link_type", linkType))
 
 	hasher := hashing.NewSHA256HashComputer()
 	service := pull.NewService(jiraClient, hasher, linkType)
 
 	// Set all tasks for dependency mapping
+	slog.Debug("setting all tasks for dependency mapping", slog.Int("task_count", len(allTasks)))
 	service.SetAllTasks(allTasks)
 
 	return &pullContext{
@@ -231,26 +286,55 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 }
 
 func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.TaskFile, flags pullFlags) error {
+	slog.Debug("starting pull execution", slog.Int("task_count", len(tasks)))
 	color.Cyan("Pulling updates from Jira...\n")
 
 	var opts []pull.Option
 	if flags.force {
+		slog.Debug("force option enabled for pull")
 		opts = append(opts, pull.WithForce(true))
 	}
 
 	results := pullCtx.service.PullAll(ctx, tasks, opts...)
+	slog.Debug("pull completed", slog.Int("result_count", len(results)))
 
-	var updated, skipped, conflicts, errors int
+	var updated, skipped, conflicts, errCount int
 	for _, result := range results {
 		// Check if dependencies changed (Jira differs from local, in either direction)
 		depsUpdated := result.DependencyResult != nil && result.DependencyResult.HasChanges
 
+		slog.Debug("processing pull result",
+			slog.String("task", result.Task.TaskID()),
+			slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
+			slog.String("action", string(result.Action)),
+			slog.Bool("has_dependency_result", result.DependencyResult != nil),
+			slog.Bool("deps_updated", depsUpdated),
+		)
+
+		if result.DependencyResult != nil {
+			slog.Debug("dependency result details",
+				slog.String("task", result.Task.TaskID()),
+				slog.Any("local_deps", result.DependencyResult.LocalDeps),
+				slog.Any("jira_deps", result.DependencyResult.JiraDeps),
+				slog.Bool("has_changes", result.DependencyResult.HasChanges),
+			)
+		}
+
 		switch result.Action {
 		case pull.ActionUpdated:
 			updated++
+			slog.Debug("writing updated task",
+				slog.String("task", result.Task.TaskID()),
+				slog.String("path", result.Task.Path),
+				slog.Any("fields", result.Fields),
+			)
 			if err := pullCtx.repo.WriteTask(result.Task); err != nil {
+				slog.Debug("failed to write task",
+					slog.String("task", result.Task.TaskID()),
+					slog.String("error", err.Error()),
+				)
 				color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
-				errors++
+				errCount++
 				continue
 			}
 			color.Green("[OK] Updated %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
@@ -262,34 +346,64 @@ func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.Task
 			}
 		case pull.ActionConflict:
 			conflicts++
+			slog.Debug("conflict detected",
+				slog.String("task", result.Task.TaskID()),
+				slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
+				slog.Any("fields", result.Fields),
+			)
 			color.Yellow("[CONFLICT] %s (%s) - use --force to overwrite local", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
 		case pull.ActionError:
-			errors++
+			errCount++
+			slog.Debug("error during pull",
+				slog.String("task", result.Task.TaskID()),
+				slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
+				slog.String("error", result.Error.Error()),
+			)
 			color.Red("[ERROR] %s: %v", result.Task.Frontmatter.JiraNumber, result.Error)
 		case pull.ActionSkipped:
 			// Even if content didn't change, write if dependencies were pulled from Jira
 			if depsUpdated {
 				updated++
+				slog.Debug("writing task with updated dependencies",
+					slog.String("task", result.Task.TaskID()),
+					slog.String("path", result.Task.Path),
+					slog.Any("jira_deps", result.DependencyResult.JiraDeps),
+				)
 				if err := pullCtx.repo.WriteTask(result.Task); err != nil {
+					slog.Debug("failed to write task",
+						slog.String("task", result.Task.TaskID()),
+						slog.String("error", err.Error()),
+					)
 					color.Red("[ERROR] Failed to save %s: %v", result.Task.Path, err)
-					errors++
+					errCount++
 					continue
 				}
 				color.Green("[OK] Updated %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
 				fmt.Printf("    - jira-dependencies\n")
 			} else {
 				skipped++
+				slog.Debug("task skipped - no changes",
+					slog.String("task", result.Task.TaskID()),
+					slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
+				)
 			}
 		}
 	}
 
+	slog.Debug("pull execution summary",
+		slog.Int("updated", updated),
+		slog.Int("skipped", skipped),
+		slog.Int("conflicts", conflicts),
+		slog.Int("errors", errCount),
+	)
+
 	fmt.Println()
 	if conflicts > 0 {
-		color.Yellow("Pull completed with conflicts: %d updated, %d up-to-date, %d conflicts, %d errors", updated, skipped, conflicts, errors)
+		color.Yellow("Pull completed with conflicts: %d updated, %d up-to-date, %d conflicts, %d errors", updated, skipped, conflicts, errCount)
 		return nil
 	}
-	if errors > 0 {
-		color.Red("Pull completed with errors: %d updated, %d up-to-date, %d errors", updated, skipped, errors)
+	if errCount > 0 {
+		color.Red("Pull completed with errors: %d updated, %d up-to-date, %d errors", updated, skipped, errCount)
 		return nil
 	}
 
