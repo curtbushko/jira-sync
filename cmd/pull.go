@@ -212,8 +212,14 @@ func createPullContext(repo ports.TaskRepository, allTasks []*domain.TaskFile) (
 		return nil, fmt.Errorf("create jira client: %w", err)
 	}
 
+	// Get link type from config (defaults to "Blocks")
+	linkType := viper.GetString("link_types.dependency")
+	if linkType == "" {
+		linkType = "Blocks"
+	}
+
 	hasher := hashing.NewSHA256HashComputer()
-	service := pull.NewService(jiraClient, hasher)
+	service := pull.NewService(jiraClient, hasher, linkType)
 
 	// Set all tasks for dependency mapping
 	service.SetAllTasks(allTasks)

@@ -33,12 +33,16 @@ type ChangeResult struct {
 
 // ChangeDetector compares local task files with Jira issues.
 type ChangeDetector struct {
-	hasher ports.HashComputer
+	hasher   ports.HashComputer
+	linkType string // Jira link type for dependencies (e.g., "Blocks", "Is Blocked By")
 }
 
 // NewChangeDetector creates a new change detector.
-func NewChangeDetector(hasher ports.HashComputer) *ChangeDetector {
-	return &ChangeDetector{hasher: hasher}
+func NewChangeDetector(hasher ports.HashComputer, linkType string) *ChangeDetector {
+	if linkType == "" {
+		linkType = LinkTypeBlocks
+	}
+	return &ChangeDetector{hasher: hasher, linkType: linkType}
 }
 
 // Detect compares a local task with a Jira issue and returns the change result.
@@ -177,13 +181,13 @@ func (d *ChangeDetector) DetectDependencies(
 	// Get local dependency task IDs
 	localDepIDs := task.JiraDependencyIDs()
 
-	// Extract Jira "Blocks" links where this task is blocked (outward)
-	// A "Blocks" link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123
+	// Extract dependency links where this task is blocked (outward)
+	// A link with InwardIssue=X and OutwardIssue=GUARD-123 means X blocks GUARD-123
 	var jiraDepTaskIDs []string
 
 	for _, link := range jiraLinks {
-		// Only consider "Blocks" type links where this task is the blocked (outward) issue
-		if link.Type == LinkTypeBlocks && link.OutwardIssue == task.Frontmatter.JiraNumber && link.InwardIssue != "" {
+		// Only consider configured link type where this task is the blocked (outward) issue
+		if link.Type == d.linkType && link.OutwardIssue == task.Frontmatter.JiraNumber && link.InwardIssue != "" {
 			// Convert Jira key to task ID
 			if taskID, ok := jiraKeyToTaskID[link.InwardIssue]; ok {
 				jiraDepTaskIDs = append(jiraDepTaskIDs, taskID)

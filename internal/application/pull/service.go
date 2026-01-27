@@ -56,11 +56,12 @@ type Service struct {
 }
 
 // NewService creates a new pull service.
-func NewService(jira ports.JiraClient, hasher ports.HashComputer) *Service {
+// linkType specifies the Jira link type for dependencies (e.g., "Blocks", "Is Blocked By").
+func NewService(jira ports.JiraClient, hasher ports.HashComputer, linkType string) *Service {
 	return &Service{
 		jira:     jira,
 		hasher:   hasher,
-		detector: NewChangeDetector(hasher),
+		detector: NewChangeDetector(hasher, linkType),
 	}
 }
 

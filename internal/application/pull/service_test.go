@@ -41,7 +41,7 @@ func TestPullService_PullTask_UpdatesLocalFromJira(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -83,7 +83,7 @@ func TestPullService_PullTask_SkipsNoChanges(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -116,7 +116,7 @@ func TestPullService_PullTask_DetectsConflict(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -151,7 +151,7 @@ func TestPullService_PullTask_ForcePull(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	result := svc.PullTask(context.Background(), task, WithForce(true))
 
 	require.NoError(t, result.Error)
@@ -175,7 +175,7 @@ func TestPullService_PullTask_SkipsNoJiraNumber(t *testing.T) {
 		Description: "Description",
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
@@ -238,7 +238,7 @@ func TestPullService_PullAll(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	results := svc.PullAll(context.Background(), tasks)
 
 	require.Len(t, results, 3)
@@ -316,7 +316,7 @@ func TestPullService_PullTask_PullsDependenciesFromJira(t *testing.T) {
 		}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	svc.SetAllTasks(allTasks)
 
 	result := svc.PullTask(context.Background(), task)
@@ -379,7 +379,7 @@ func TestPullService_PullTask_DoesNotPushDependenciesToJira(t *testing.T) {
 		return []ports.IssueLink{}, nil
 	}
 
-	svc := NewService(mockJira, hasher)
+	svc := NewService(mockJira, hasher, "Blocks")
 	svc.SetAllTasks(allTasks)
 
 	result := svc.PullTask(context.Background(), task)

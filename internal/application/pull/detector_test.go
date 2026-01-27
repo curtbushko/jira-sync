@@ -32,7 +32,7 @@ func TestDetectChanges_LocalOnlyChanged(t *testing.T) {
 		Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC), // Before last sync
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	assert.Equal(t, ChangeTypeLocalToJira, result.Type)
@@ -62,7 +62,7 @@ func TestDetectChanges_JiraOnlyChanged(t *testing.T) {
 		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
@@ -90,7 +90,7 @@ func TestDetectChanges_BothChanged_Conflict(t *testing.T) {
 		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	assert.Equal(t, ChangeTypeConflict, result.Type)
@@ -118,7 +118,7 @@ func TestDetectChanges_NoChanges(t *testing.T) {
 		Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC), // Before last sync
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	assert.Equal(t, ChangeTypeNone, result.Type)
@@ -146,7 +146,7 @@ func TestDetectChanges_NeverSynced(t *testing.T) {
 		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC),
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	// When never synced and content differs, should be conflict
@@ -177,7 +177,7 @@ func TestDetectChanges_StatusChanged(t *testing.T) {
 		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC),
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
 	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
@@ -209,7 +209,7 @@ func TestDetectDependencies_InSync(t *testing.T) {
 		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	assert.False(t, result.HasChanges)
@@ -237,7 +237,7 @@ func TestDetectDependencies_JiraHasMore(t *testing.T) {
 		{Type: "Blocks", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	assert.True(t, result.HasChanges)
@@ -266,7 +266,7 @@ func TestDetectDependencies_LocalHasMore(t *testing.T) {
 		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	assert.True(t, result.HasChanges)
@@ -295,7 +295,7 @@ func TestDetectDependencies_IgnoresOtherLinkTypes(t *testing.T) {
 		{ID: "link-2", Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: "GUARD-123"},
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	// Should be in sync (Relates link is ignored)
@@ -316,7 +316,7 @@ func TestDetectDependencies_EmptyDependencies(t *testing.T) {
 
 	jiraLinks := []ports.IssueLink{}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	assert.False(t, result.HasChanges)
@@ -341,7 +341,7 @@ func TestDetectDependencies_WikiLinkFormat(t *testing.T) {
 		{Type: "Blocks", InwardIssue: "GUARD-101", OutwardIssue: "GUARD-123"},
 	}
 
-	detector := NewChangeDetector(hasher)
+	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.DetectDependencies(task, jiraLinks, allTasks)
 
 	assert.False(t, result.HasChanges)
