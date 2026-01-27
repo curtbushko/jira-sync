@@ -273,7 +273,7 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 				JiraNumber:       "GUARD-102",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"}, // KB-1 doesn't exist in tasks
+				JiraDependencies: []string{"invalid-dep"}, // lowercase, not a valid Jira key
 			},
 		},
 	}
@@ -282,7 +282,33 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "KB-1")
+	assert.Contains(t, err.Error(), "invalid-dep")
+}
+
+func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
+	// Test that external Jira keys (not in local tasks) are used directly
+	mockJira := jira.NewMockJiraClient()
+
+	tasks := []*domain.TaskFile{
+		{
+			Frontmatter: domain.Frontmatter{
+				Title:            "KB-1: First",
+				JiraNumber:       "GUARD-101",
+				SyncStatus:       domain.SyncStatusCreated,
+				JiraParent:       "GUARD-100",
+				JiraDependencies: []string{"GUARD-999"}, // External Jira key, not in local tasks
+			},
+		},
+	}
+
+	svc := NewService(nil, mockJira, nil)
+	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+
+	require.NoError(t, err)
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	// Verify the link was created with the external Jira key
+	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
+	assert.Equal(t, "GUARD-999", mockJira.CreateLinkCalls[0].Outward)
 }
 
 func TestPushService_UpdateModified(t *testing.T) {

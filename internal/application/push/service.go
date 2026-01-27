@@ -134,9 +134,11 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 }
 
 // LinkDependencies creates dependency links in Jira for all tasks.
-// Uses jira-dependencies (not sync-dependencies) since those define Jira "blocks" links.
+// Uses jira-dependencies which can contain either:
+//   - Local task IDs (e.g., "KB-1") that map to Jira keys
+//   - Direct Jira keys (e.g., "GUARD-1519") for external dependencies
 func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile, linkType string) error {
-	// Build task ID to Jira key map
+	// Build task ID to Jira key map (and Jira key to itself for external deps)
 	idMap := s.BuildTaskIDMap(tasks)
 
 	// Create links for each task based on jira-dependencies
@@ -153,7 +155,14 @@ func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile
 		for _, depID := range depIDs {
 			blockerIssue, ok := idMap[depID]
 			if !ok {
-				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, depID, task.Frontmatter.Title)
+				// Not in local task map - check if it looks like a Jira key
+				// Jira keys are typically PROJECT-NUMBER (e.g., GUARD-1519)
+				if isJiraKey(depID) {
+					// Use the dependency ID directly as the Jira key
+					blockerIssue = depID
+				} else {
+					return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, depID, task.Frontmatter.Title)
+				}
 			}
 
 			// Create link: blockedIssue is blocked by blockerIssue
@@ -166,6 +175,34 @@ func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile
 	}
 
 	return nil
+}
+
+// isJiraKey checks if a string looks like a Jira issue key (PROJECT-NUMBER).
+func isJiraKey(issueKey string) bool {
+	// Jira keys are typically uppercase letters followed by dash and numbers
+	// e.g., GUARD-1519, PROJ-123
+	idx := strings.Index(issueKey, "-")
+	if idx <= 0 || idx >= len(issueKey)-1 {
+		return false
+	}
+	project := issueKey[:idx]
+	number := issueKey[idx+1:]
+
+	// Project part should be all uppercase letters
+	for _, c := range project {
+		if c < 'A' || c > 'Z' {
+			return false
+		}
+	}
+
+	// Number part should be all digits
+	for _, c := range number {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+
+	return true
 }
 
 // UpdateModified updates Jira tickets for tasks with content changes.

@@ -144,14 +144,16 @@ func TestTopologicalSort_DiamondDependency(t *testing.T) {
 	assert.Contains(t, ids, "KB-3")
 }
 
-func TestTopologicalSort_MissingDependency(t *testing.T) {
-	// KB-2 depends on KB-1, but KB-1 doesn't exist
+func TestTopologicalSort_ExternalJiraDependency(t *testing.T) {
+	// KB-2 depends on GUARD-999, which is an external Jira issue (not in local tasks)
+	// This should NOT be an error - external dependencies are allowed
 	tasks := []*domain.TaskFile{
-		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"KB-1"}, JiraParent: "P"}},
+		{Frontmatter: domain.Frontmatter{Title: "KB-2: Second", JiraDependencies: []string{"GUARD-999"}, JiraParent: "P"}},
 	}
 
-	_, err := TopologicalSort(tasks, tasks)
+	sorted, err := TopologicalSort(tasks, tasks)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "KB-1")
+	require.NoError(t, err)
+	assert.Len(t, sorted, 1)
+	assert.Equal(t, "KB-2", sorted[0].TaskID())
 }

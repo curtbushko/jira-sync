@@ -21,10 +21,14 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		return []*domain.TaskFile{}, nil
 	}
 
-	// Build task ID to task map for all tasks
-	taskByID := make(map[string]*domain.TaskFile, len(allTasks))
+	// Build task ID to task map for all tasks (both by local task ID and Jira key)
+	taskByID := make(map[string]*domain.TaskFile, len(allTasks)*2)
 	for _, task := range allTasks {
 		taskByID[task.TaskID()] = task
+		// Also index by Jira key if available
+		if task.Frontmatter.JiraNumber != "" {
+			taskByID[task.Frontmatter.JiraNumber] = task
+		}
 	}
 
 	// Build pending set for quick lookup
@@ -50,17 +54,21 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		depIDs := task.JiraDependencyIDs()
 
 		for _, depID := range depIDs {
-			// Check if dependency exists
+			// Check if dependency exists (either as local task ID or Jira key)
 			depTask, exists := taskByID[depID]
 			if !exists {
-				return nil, fmt.Errorf("dependency not found: %s required by %s", depID, taskID)
+				// Dependency not found locally - assume it's an external Jira issue
+				// that already exists (e.g., GUARD-1519)
+				// Skip validation for external dependencies
+				continue
 			}
 
 			// Only count dependencies that are in the pending set
 			// (already created tasks don't affect ordering)
-			if pendingSet[depID] {
-				// depID -> taskID (depID must come before taskID)
-				adjList[depID] = append(adjList[depID], taskID)
+			depTaskID := depTask.TaskID()
+			if pendingSet[depTaskID] {
+				// depTaskID -> taskID (depTaskID must come before taskID)
+				adjList[depTaskID] = append(adjList[depTaskID], taskID)
 				inDegree[taskID]++
 			} else if depTask.Frontmatter.SyncStatus != domain.SyncStatusCreated &&
 				depTask.Frontmatter.SyncStatus != domain.SyncStatusLinked {
