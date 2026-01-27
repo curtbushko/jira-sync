@@ -48,51 +48,33 @@ func NewChangeDetector(hasher ports.HashComputer, linkType string) *ChangeDetect
 }
 
 // Detect compares a local task with a Jira issue and returns the change result.
+// For pull operations, Jira is the source of truth - if fields differ, pull them.
 func (d *ChangeDetector) Detect(task *domain.TaskFile, jiraIssue *ports.Issue) ChangeResult {
 	slog.Debug("detecting changes",
 		slog.String("task", task.TaskID()),
 		slog.String("jira_key", task.Frontmatter.JiraNumber),
 	)
 
-	localChanged := d.hasLocalChanges(task)
-	jiraChanged, changedFields := d.hasJiraChanges(task, jiraIssue)
+	// Compare actual field values - if Jira differs from local, we should pull
+	changedFields := d.compareJiraFields(task, jiraIssue)
+	hasChanges := len(changedFields) > 0
 
 	slog.Debug("change detection results",
 		slog.String("task", task.TaskID()),
-		slog.Bool("local_changed", localChanged),
-		slog.Bool("jira_changed", jiraChanged),
+		slog.Bool("has_changes", hasChanges),
 		slog.Any("changed_fields", changedFields),
 	)
 
-	// Both changed = conflict
-	if localChanged && jiraChanged {
-		slog.Debug("conflict detected - both local and jira changed",
-			slog.String("task", task.TaskID()),
-		)
-		return ChangeResult{Type: ChangeTypeConflict, Fields: changedFields}
-	}
-
-	// Only local changed = push to Jira
-	if localChanged {
-		localFields := d.getLocalChangedFields(task, jiraIssue)
-		slog.Debug("local changes detected - should push to jira",
-			slog.String("task", task.TaskID()),
-			slog.Any("fields", localFields),
-		)
-		return ChangeResult{Type: ChangeTypeLocalToJira, Fields: localFields}
-	}
-
-	// Only Jira changed = pull to local
-	if jiraChanged {
-		slog.Debug("jira changes detected - should pull to local",
+	if hasChanges {
+		slog.Debug("jira differs from local - should pull",
 			slog.String("task", task.TaskID()),
 			slog.Any("fields", changedFields),
 		)
 		return ChangeResult{Type: ChangeTypeJiraToLocal, Fields: changedFields}
 	}
 
-	// No changes
-	slog.Debug("no changes detected",
+	// No changes needed
+	slog.Debug("no changes detected - jira matches local",
 		slog.String("task", task.TaskID()),
 	)
 	return ChangeResult{Type: ChangeTypeNone}
@@ -123,31 +105,10 @@ func (d *ChangeDetector) hasLocalChanges(task *domain.TaskFile) bool {
 	return hashChanged
 }
 
-// hasJiraChanges checks if the Jira issue has changed since last sync.
+// hasJiraChanges checks if the Jira issue differs from local.
+// Always compares actual field values - doesn't rely on timestamps.
 func (d *ChangeDetector) hasJiraChanges(task *domain.TaskFile, jiraIssue *ports.Issue) (bool, []string) {
-	// Parse last synced time
-	lastSynced := d.parseLastSynced(task.Frontmatter.LastSynced)
-
-	// Check if Jira was updated after last sync
-	jiraUpdatedAfterSync := jiraIssue.Updated.After(lastSynced)
-
-	slog.Debug("jira changes check - timestamps",
-		slog.String("task", task.TaskID()),
-		slog.String("last_synced_raw", task.Frontmatter.LastSynced),
-		slog.Time("last_synced", lastSynced),
-		slog.Time("jira_updated", jiraIssue.Updated),
-		slog.Bool("jira_updated_after_sync", jiraUpdatedAfterSync),
-	)
-
-	// If Jira not updated and we have a valid last sync time, no changes
-	if !jiraUpdatedAfterSync && !lastSynced.IsZero() {
-		slog.Debug("jira changes check - no changes (jira not updated after sync)",
-			slog.String("task", task.TaskID()),
-		)
-		return false, nil
-	}
-
-	// Check which fields differ
+	// Always compare actual field values
 	changedFields := d.compareJiraFields(task, jiraIssue)
 	hasChanges := len(changedFields) > 0
 	slog.Debug("jira changes check - field comparison",

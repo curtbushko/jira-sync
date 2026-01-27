@@ -10,32 +10,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDetectChanges_LocalOnlyChanged(t *testing.T) {
+func TestDetectChanges_FieldsDiffer(t *testing.T) {
 	hasher := hashing.NewSHA256HashComputer()
 
-	// Create task with old hash (content has changed locally)
+	// Local and Jira have different descriptions
 	task := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
 			Title:       "KB-1: Test",
 			JiraNumber:  "GUARD-123",
 			JiraParent:  "GUARD-100",
-			ContentHash: "oldhash", // Different from actual content
+			ContentHash: "oldhash",
 			LastSynced:  "2026-01-15T10:00:00Z",
 		},
-		Description: "Updated description", // Changed locally
+		Description: "Local description",
 	}
 
 	jiraIssue := &ports.Issue{
 		Key:         "GUARD-123",
 		Summary:     "KB-1: Test",
-		Description: "Original description",
-		Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC), // Before last sync
+		Description: "Jira description",
+		Updated:     time.Date(2026, 1, 14, 10, 0, 0, 0, time.UTC),
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
-	assert.Equal(t, ChangeTypeLocalToJira, result.Type)
+	// Pull always syncs from Jira when fields differ
+	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
 	assert.Contains(t, result.Fields, "description")
 }
 
@@ -69,15 +70,16 @@ func TestDetectChanges_JiraOnlyChanged(t *testing.T) {
 	assert.Contains(t, result.Fields, "title")
 }
 
-func TestDetectChanges_BothChanged_Conflict(t *testing.T) {
+func TestDetectChanges_MultipleFieldsDiffer(t *testing.T) {
 	hasher := hashing.NewSHA256HashComputer()
 
+	// Both title and description differ between local and Jira
 	task := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
 			Title:       "KB-1: Local Title",
 			JiraNumber:  "GUARD-123",
 			JiraParent:  "GUARD-100",
-			ContentHash: "oldhash", // Different from current (local changed)
+			ContentHash: "oldhash",
 			LastSynced:  "2026-01-15T10:00:00Z",
 		},
 		Description: "Local description",
@@ -87,13 +89,16 @@ func TestDetectChanges_BothChanged_Conflict(t *testing.T) {
 		Key:         "GUARD-123",
 		Summary:     "KB-1: Jira Title",
 		Description: "Jira description",
-		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
+		Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC),
 	}
 
 	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
-	assert.Equal(t, ChangeTypeConflict, result.Type)
+	// Pull always syncs from Jira when fields differ
+	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
+	assert.Contains(t, result.Fields, "title")
+	assert.Contains(t, result.Fields, "description")
 }
 
 func TestDetectChanges_NoChanges(t *testing.T) {
@@ -149,9 +154,9 @@ func TestDetectChanges_NeverSynced(t *testing.T) {
 	detector := NewChangeDetector(hasher, "Blocks")
 	result := detector.Detect(task, jiraIssue)
 
-	// When never synced and content differs, should be conflict
-	// (user needs to decide which to keep)
-	assert.Equal(t, ChangeTypeConflict, result.Type)
+	// Pull always syncs from Jira when fields differ
+	assert.Equal(t, ChangeTypeJiraToLocal, result.Type)
+	assert.Contains(t, result.Fields, "description")
 }
 
 func TestDetectChanges_StatusChanged(t *testing.T) {

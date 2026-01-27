@@ -90,29 +90,29 @@ func TestPullService_PullTask_SkipsNoChanges(t *testing.T) {
 	assert.Equal(t, ActionSkipped, result.Action)
 }
 
-func TestPullService_PullTask_DetectsConflict(t *testing.T) {
+func TestPullService_PullTask_AlwaysSyncsFromJira(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()
 
-	// Task with local changes (hash doesn't match)
+	// Task with different values than Jira
 	task := &domain.TaskFile{
 		Path: "/tasks/test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:       "KB-1: Local Changes",
+			Title:       "KB-1: Local Title",
 			JiraNumber:  "GUARD-123",
-			ContentHash: "oldhash", // Different from current
+			ContentHash: "oldhash",
 			LastSynced:  "2026-01-15T10:00:00Z",
 		},
 		Description: "Local description",
 	}
 
-	// Mock GetIssue to return different version (Jira also changed)
+	// Mock GetIssue to return different version from Jira
 	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
 		return &ports.Issue{
 			Key:         "GUARD-123",
-			Summary:     "KB-1: Jira Changes",
+			Summary:     "KB-1: Jira Title",
 			Description: "Jira description",
-			Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC), // After last sync
+			Updated:     time.Date(2026, 1, 16, 10, 0, 0, 0, time.UTC),
 		}, nil
 	}
 
@@ -120,9 +120,10 @@ func TestPullService_PullTask_DetectsConflict(t *testing.T) {
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
-	assert.Equal(t, ActionConflict, result.Action)
-	// Should not update local on conflict
-	assert.Equal(t, "KB-1: Local Changes", task.Frontmatter.Title)
+	// Pull always syncs from Jira - no conflicts
+	assert.Equal(t, ActionUpdated, result.Action)
+	assert.Equal(t, "KB-1: Jira Title", task.Frontmatter.Title)
+	assert.Equal(t, "Jira description", task.Description)
 }
 
 func TestPullService_PullTask_ForcePull(t *testing.T) {
