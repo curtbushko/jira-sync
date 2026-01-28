@@ -67,7 +67,7 @@ Old task description.`
 	contentStr := string(content)
 
 	// Should contain migrated fields
-	assert.Contains(t, contentStr, "jira-state: Todo")
+	assert.Contains(t, contentStr, "jira-state: To Do")
 	assert.Contains(t, contentStr, "sync-status: pending")
 	assert.Contains(t, contentStr, "jira-blocks: []")
 	assert.Contains(t, contentStr, "jira-is-blocked-by: []")

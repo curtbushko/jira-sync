@@ -269,7 +269,7 @@ Old task description.`
 
 	require.NoError(t, err)
 	// Should have default values from migration
-	assert.Equal(t, "Todo", task.Frontmatter.JiraState)
+	assert.Equal(t, "To Do", task.Frontmatter.JiraState)
 	assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
 	// Slices should be non-nil empty
 	assert.NotNil(t, task.Frontmatter.JiraIsBlockedBy)

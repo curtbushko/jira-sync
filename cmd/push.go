@@ -267,6 +267,15 @@ func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushC
 		return fmt.Errorf("create tickets: %w", err)
 	}
 
+	// Transition newly created issues to match local jira-state
+	transitioned, err := pushCtx.service.TransitionIssues(ctx, categorized.Pending)
+	if err != nil {
+		return fmt.Errorf("transition issues: %w", err)
+	}
+	if transitioned > 0 {
+		color.Cyan("Transitioned %d issue(s) to target state\n", transitioned)
+	}
+
 	for _, task := range categorized.Pending {
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)

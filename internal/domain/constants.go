@@ -17,7 +17,7 @@ const DefaultIssueType = "Story"
 const DefaultEndDateOffset = 7
 
 // DefaultJiraState is the default Jira ticket state for new tasks.
-const DefaultJiraState = "Todo"
+const DefaultJiraState = "To Do"
 
 // Jira field size limits (Jira Cloud).
 // See docs/jira-field-limits.md for details and sources.
