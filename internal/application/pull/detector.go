@@ -11,9 +11,9 @@ import (
 // LinkTypeBlocking is the default Jira link type for blocking relationships.
 const LinkTypeBlocking = "Blocking"
 
-// DependencyDetector extracts dependencies from Jira issue links.
+// DependencyDetector extracts blocking relationships from Jira issue links.
 type DependencyDetector struct {
-	linkType string // Jira link type for dependencies (e.g., "Blocks", "Blocking")
+	linkType string // Jira link type for blocking relationships (e.g., "Blocks", "Blocking")
 }
 
 // NewDependencyDetector creates a new dependency detector.
@@ -25,20 +25,20 @@ func NewDependencyDetector(linkType string) *DependencyDetector {
 	return &DependencyDetector{linkType: linkType}
 }
 
-// ExtractDependencies extracts dependencies from Jira issue links.
-// Returns the list of Jira issue keys that this task depends on.
-func (d *DependencyDetector) ExtractDependencies(
+// ExtractBlockingRelationships extracts blocking relationships from Jira issue links.
+// Returns two lists:
+//   - blocks: Jira issue keys that this task blocks (InwardIssue - they depend on us)
+//   - blockedBy: Jira issue keys that block this task (OutwardIssue - we depend on them)
+func (d *DependencyDetector) ExtractBlockingRelationships(
 	task *domain.TaskFile,
 	jiraLinks []ports.IssueLink,
-) []string {
-	slog.Debug("extracting dependencies",
+) (blocks []string, blockedBy []string) {
+	slog.Debug("extracting blocking relationships",
 		slog.String("task", task.TaskID()),
 		slog.String("jira_key", task.Frontmatter.JiraNumber),
 		slog.String("link_type", d.linkType),
 		slog.Int("link_count", len(jiraLinks)),
 	)
-
-	var deps []string
 
 	for i, link := range jiraLinks {
 		slog.Debug("examining jira link",
@@ -49,19 +49,34 @@ func (d *DependencyDetector) ExtractDependencies(
 			slog.String("outward_issue", link.OutwardIssue),
 		)
 
-		if link.Type == d.linkType && link.InwardIssue != "" {
-			slog.Debug("dependency link matched",
+		if link.Type != d.linkType {
+			continue
+		}
+
+		// InwardIssue = issues this task blocks (they depend on us)
+		if link.InwardIssue != "" {
+			slog.Debug("found issue we block",
 				slog.String("task", task.TaskID()),
-				slog.String("dependency", link.InwardIssue),
+				slog.String("blocks", link.InwardIssue),
 			)
-			deps = append(deps, link.InwardIssue)
+			blocks = append(blocks, link.InwardIssue)
+		}
+
+		// OutwardIssue = issues that block this task (we depend on them)
+		if link.OutwardIssue != "" {
+			slog.Debug("found issue that blocks us",
+				slog.String("task", task.TaskID()),
+				slog.String("blocked_by", link.OutwardIssue),
+			)
+			blockedBy = append(blockedBy, link.OutwardIssue)
 		}
 	}
 
-	slog.Debug("dependency extraction complete",
+	slog.Debug("blocking relationship extraction complete",
 		slog.String("task", task.TaskID()),
-		slog.Any("deps", deps),
+		slog.Any("blocks", blocks),
+		slog.Any("blocked_by", blockedBy),
 	)
 
-	return deps
+	return blocks, blockedBy
 }

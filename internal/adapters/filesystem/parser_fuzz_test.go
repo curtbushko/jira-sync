@@ -177,9 +177,9 @@ Implement detection.`,
 		}
 
 		// Check dependencies length match
-		if len(task1.Frontmatter.JiraDependencies) != len(task2.Frontmatter.JiraDependencies) {
+		if len(task1.Frontmatter.JiraIsBlockedBy) != len(task2.Frontmatter.JiraIsBlockedBy) {
 			t.Errorf("Dependencies length mismatch: %d vs %d",
-				len(task1.Frontmatter.JiraDependencies), len(task2.Frontmatter.JiraDependencies))
+				len(task1.Frontmatter.JiraIsBlockedBy), len(task2.Frontmatter.JiraIsBlockedBy))
 		}
 	})
 }

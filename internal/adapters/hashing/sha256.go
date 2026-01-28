@@ -18,7 +18,7 @@ func NewSHA256HashComputer() *SHA256HashComputer {
 }
 
 // ComputeHash returns SHA256 hash of task content.
-// It hashes title + jira-parent + jira-dependencies + description.
+// It hashes title + jira-parent + jira-blocks + jira-is-blocked-by + description.
 // Fields like jira-number, jira-url, sync-status, and content-hash
 // are excluded because they don't affect the Jira ticket content.
 func (h *SHA256HashComputer) ComputeHash(task *domain.TaskFile) string {
@@ -30,8 +30,15 @@ func (h *SHA256HashComputer) ComputeHash(task *domain.TaskFile) string {
 	buf.WriteString(task.Frontmatter.JiraParent)
 	buf.WriteString("\x00")
 
-	// Write jira-dependencies in order (these create Jira links)
-	for _, dep := range task.Frontmatter.JiraDependencies {
+	// Write jira-blocks in order (issues we block - creates Jira links)
+	for _, dep := range task.Frontmatter.JiraBlocks {
+		buf.WriteString(dep)
+		buf.WriteString("\x00")
+	}
+
+	// Write jira-is-blocked-by in order (issues that block us - creates Jira links)
+	buf.WriteString("blocked-by:")
+	for _, dep := range task.Frontmatter.JiraIsBlockedBy {
 		buf.WriteString(dep)
 		buf.WriteString("\x00")
 	}

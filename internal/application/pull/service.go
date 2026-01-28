@@ -12,10 +12,11 @@ import (
 
 // Result contains the result of pulling a task from Jira.
 type Result struct {
-	Task         *domain.TaskFile
-	UpdatedDeps  bool     // Whether dependencies were updated
-	Dependencies []string // The dependencies pulled from Jira
-	Error        error
+	Task           *domain.TaskFile
+	UpdatedLinks   bool     // Whether blocking relationships were updated
+	JiraBlocks     []string // Issues this task blocks
+	JiraIsBlockedBy []string // Issues that block this task
+	Error          error
 }
 
 // Service handles pulling from Jira to local files.
@@ -70,23 +71,25 @@ func (s *Service) PullTask(ctx context.Context, task *domain.TaskFile) *Result {
 	// Update local task with Jira values
 	s.syncFromJira(task, jiraIssue)
 
-	// Fetch and update dependencies
+	// Fetch and update blocking relationships
 	result := &Result{Task: task}
-	deps, err := s.syncDependencies(ctx, task)
+	blocks, blockedBy, err := s.syncBlockingRelationships(ctx, task)
 	if err != nil {
-		slog.Debug("failed to sync dependencies",
+		slog.Debug("failed to sync blocking relationships",
 			slog.String("task", task.TaskID()),
 			slog.String("error", err.Error()),
 		)
 		result.Error = err
 		return result
 	}
-	result.Dependencies = deps
-	result.UpdatedDeps = true
+	result.JiraBlocks = blocks
+	result.JiraIsBlockedBy = blockedBy
+	result.UpdatedLinks = true
 
 	slog.Debug("pull task completed",
 		slog.String("task", task.TaskID()),
-		slog.Any("dependencies", result.Dependencies),
+		slog.Any("blocks", result.JiraBlocks),
+		slog.Any("blocked_by", result.JiraIsBlockedBy),
 	)
 
 	return result
@@ -133,9 +136,9 @@ func (s *Service) syncFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 	task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
 }
 
-// syncDependencies fetches and updates dependencies from Jira.
-func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) ([]string, error) {
-	slog.Debug("syncing dependencies",
+// syncBlockingRelationships fetches and updates blocking relationships from Jira.
+func (s *Service) syncBlockingRelationships(ctx context.Context, task *domain.TaskFile) (blocks []string, blockedBy []string, err error) {
+	slog.Debug("syncing blocking relationships",
 		slog.String("task", task.TaskID()),
 		slog.String("jira_key", task.Frontmatter.JiraNumber),
 	)
@@ -143,7 +146,7 @@ func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) (
 	// Fetch Jira links
 	jiraLinks, err := s.jira.GetIssueLinks(ctx, task.Frontmatter.JiraNumber)
 	if err != nil {
-		return nil, fmt.Errorf("get issue links for %s: %w", task.Frontmatter.JiraNumber, err)
+		return nil, nil, fmt.Errorf("get issue links for %s: %w", task.Frontmatter.JiraNumber, err)
 	}
 
 	slog.Debug("fetched jira links",
@@ -151,20 +154,27 @@ func (s *Service) syncDependencies(ctx context.Context, task *domain.TaskFile) (
 		slog.Int("link_count", len(jiraLinks)),
 	)
 
-	// Extract dependencies
-	deps := s.depDetector.ExtractDependencies(task, jiraLinks)
+	// Extract blocking relationships
+	blocks, blockedBy = s.depDetector.ExtractBlockingRelationships(task, jiraLinks)
 
-	// Update task
-	if len(deps) > 0 {
-		task.Frontmatter.JiraDependencies = deps
+	// Update task with blocking relationships
+	if len(blocks) > 0 {
+		task.Frontmatter.JiraBlocks = blocks
 	} else {
-		task.Frontmatter.JiraDependencies = []string{}
+		task.Frontmatter.JiraBlocks = []string{}
 	}
 
-	slog.Debug("dependencies synced",
+	if len(blockedBy) > 0 {
+		task.Frontmatter.JiraIsBlockedBy = blockedBy
+	} else {
+		task.Frontmatter.JiraIsBlockedBy = []string{}
+	}
+
+	slog.Debug("blocking relationships synced",
 		slog.String("task", task.TaskID()),
-		slog.Any("dependencies", deps),
+		slog.Any("blocks", blocks),
+		slog.Any("blocked_by", blockedBy),
 	)
 
-	return deps, nil
+	return blocks, blockedBy, nil
 }

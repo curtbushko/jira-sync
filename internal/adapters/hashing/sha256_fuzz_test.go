@@ -43,7 +43,7 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:            title,
 				JiraParent:       parent,
-				JiraDependencies: nil,
+				JiraIsBlockedBy: nil,
 			},
 			Description: description,
 		}
@@ -79,7 +79,7 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:            title + "X",
 				JiraParent:       parent,
-				JiraDependencies: nil,
+				JiraIsBlockedBy: nil,
 			},
 			Description: description,
 		}
@@ -118,7 +118,7 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:            title,
 				JiraParent:       parent,
-				JiraDependencies: deps,
+				JiraIsBlockedBy: deps,
 			},
 			Description: description,
 		}
@@ -149,7 +149,7 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 				Frontmatter: domain.Frontmatter{
 					Title:            title,
 					JiraParent:       parent,
-					JiraDependencies: reversedDeps,
+					JiraIsBlockedBy: reversedDeps,
 				},
 				Description: description,
 			}
@@ -175,7 +175,7 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:            title,
 				JiraParent:       parent,
-				JiraDependencies: nil,
+				JiraIsBlockedBy: nil,
 			},
 			Description: description,
 		}
@@ -186,7 +186,7 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 			Frontmatter: domain.Frontmatter{
 				Title:            title,
 				JiraParent:       parent,
-				JiraDependencies: []string{},
+				JiraIsBlockedBy: []string{},
 			},
 			Description: description,
 		}

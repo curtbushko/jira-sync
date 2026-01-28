@@ -77,13 +77,13 @@ Implement detection of replica failures.
 	assert.Equal(t, "GUARD-102", task.Frontmatter.JiraNumber)
 	assert.Equal(t, "linked", task.Frontmatter.SyncStatus)
 	assert.Equal(t, "In Progress", task.Frontmatter.JiraState)
-	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraDependencies)
-	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraDependencies)
+	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraIsBlockedBy)
+	assert.Equal(t, []string{"KB-3", "ERR-1"}, task.Frontmatter.JiraIsBlockedBy)
 	assert.Contains(t, task.Description, "Implement detection of replica failures.")
 	assert.Contains(t, task.Description, "## Acceptance Criteria")
 }
 
-func TestParser_Parse_JiraDependencies(t *testing.T) {
+func TestParser_Parse_JiraIsBlockedBy(t *testing.T) {
 	content := `---
 title: "ERR-3: With Deps"
 jira-number: ""
@@ -106,7 +106,7 @@ Task with jira dependencies.`
 	task, err := parser.Parse("test.md", content)
 
 	require.NoError(t, err)
-	assert.Equal(t, []string{"KB-1", "KB-2"}, task.Frontmatter.JiraDependencies)
+	assert.Equal(t, []string{"KB-1", "KB-2"}, task.Frontmatter.JiraIsBlockedBy)
 }
 
 func TestParser_Parse_InvalidFrontmatter(t *testing.T) {
@@ -272,10 +272,10 @@ Old task description.`
 	assert.Equal(t, "Todo", task.Frontmatter.JiraState)
 	assert.Equal(t, "pending", task.Frontmatter.SyncStatus)
 	// Slices should be non-nil empty
-	assert.NotNil(t, task.Frontmatter.JiraDependencies)
-	assert.NotNil(t, task.Frontmatter.JiraDependencies)
-	assert.Empty(t, task.Frontmatter.JiraDependencies)
-	assert.Empty(t, task.Frontmatter.JiraDependencies)
+	assert.NotNil(t, task.Frontmatter.JiraIsBlockedBy)
+	assert.NotNil(t, task.Frontmatter.JiraIsBlockedBy)
+	assert.Empty(t, task.Frontmatter.JiraIsBlockedBy)
+	assert.Empty(t, task.Frontmatter.JiraIsBlockedBy)
 }
 
 func TestParser_Parse_PreservesExistingValues(t *testing.T) {
@@ -300,6 +300,6 @@ Task description.`
 	// Should preserve existing values
 	assert.Equal(t, "Done", task.Frontmatter.JiraState)
 	assert.Equal(t, "linked", task.Frontmatter.SyncStatus)
-	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraDependencies)
-	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraDependencies)
+	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraIsBlockedBy)
+	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraIsBlockedBy)
 }

@@ -175,8 +175,11 @@ func handlePullDryRun(ctx context.Context, tasks []*domain.TaskFile) error {
 		} else if result.Task.Frontmatter.JiraNumber != "" {
 			synced++
 			color.Green("  [WOULD SYNC] %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-			if len(result.Dependencies) > 0 {
-				fmt.Printf("    - dependencies: %v\n", result.Dependencies)
+			if len(result.JiraBlocks) > 0 {
+				fmt.Printf("    - blocks: %v\n", result.JiraBlocks)
+			}
+			if len(result.JiraIsBlockedBy) > 0 {
+				fmt.Printf("    - is-blocked-by: %v\n", result.JiraIsBlockedBy)
 			}
 		}
 	}
@@ -255,7 +258,8 @@ func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.Task
 			slog.String("task", result.Task.TaskID()),
 			slog.String("jira_key", result.Task.Frontmatter.JiraNumber),
 			slog.Bool("has_error", result.Error != nil),
-			slog.Any("dependencies", result.Dependencies),
+			slog.Any("blocks", result.JiraBlocks),
+			slog.Any("is_blocked_by", result.JiraIsBlockedBy),
 		)
 
 		if result.Error != nil {
@@ -290,8 +294,11 @@ func executePull(ctx context.Context, pullCtx *pullContext, tasks []*domain.Task
 
 		synced++
 		color.Green("[OK] Synced %s (%s)", result.Task.Frontmatter.JiraNumber, result.Task.Frontmatter.Title)
-		if len(result.Dependencies) > 0 {
-			fmt.Printf("    - dependencies: %v\n", result.Dependencies)
+		if len(result.JiraBlocks) > 0 {
+			fmt.Printf("    - blocks: %v\n", result.JiraBlocks)
+		}
+		if len(result.JiraIsBlockedBy) > 0 {
+			fmt.Printf("    - is-blocked-by: %v\n", result.JiraIsBlockedBy)
 		}
 	}
 

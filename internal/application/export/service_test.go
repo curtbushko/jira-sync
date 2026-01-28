@@ -135,6 +135,7 @@ func TestExport_ExtractDependencies_BlocksLinks(t *testing.T) {
 		Summary: "Test with Dependencies",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
+			// InwardIssue = issues this task blocks
 			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},
 			{ID: "link-2", Type: "Blocks", InwardIssue: "TEST-2"},
 		},
@@ -145,9 +146,10 @@ func TestExport_ExtractDependencies_BlocksLinks(t *testing.T) {
 	result, err := svc.Export(context.Background(), "TEST-3", Options{})
 
 	require.NoError(t, err)
-	assert.Len(t, result.Task.Frontmatter.JiraDependencies, 2)
-	assert.Contains(t, result.Task.Frontmatter.JiraDependencies, "TEST-1")
-	assert.Contains(t, result.Task.Frontmatter.JiraDependencies, "TEST-2")
+	// InwardIssue goes to JiraBlocks (issues this task blocks)
+	assert.Len(t, result.Task.Frontmatter.JiraBlocks, 2)
+	assert.Contains(t, result.Task.Frontmatter.JiraBlocks, "TEST-1")
+	assert.Contains(t, result.Task.Frontmatter.JiraBlocks, "TEST-2")
 }
 
 func TestExport_IgnoresOtherLinkTypes(t *testing.T) {
@@ -158,10 +160,10 @@ func TestExport_IgnoresOtherLinkTypes(t *testing.T) {
 		Summary: "Test with Mixed Links",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
-			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},
-			{ID: "link-2", Type: "Relates", InwardIssue: "TEST-2"},  // Should be ignored
-			{ID: "link-3", Type: "Clones", InwardIssue: "TEST-4"},   // Should be ignored
-			{ID: "link-4", Type: "Blocks", OutwardIssue: "TEST-5"}, // Outward, should be ignored
+			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},   // Goes to JiraBlocks
+			{ID: "link-2", Type: "Relates", InwardIssue: "TEST-2"},  // Ignored (not Blocks type)
+			{ID: "link-3", Type: "Clones", InwardIssue: "TEST-4"},   // Ignored (not Blocks type)
+			{ID: "link-4", Type: "Blocks", OutwardIssue: "TEST-5"},  // Goes to JiraIsBlockedBy
 		},
 	})
 
@@ -170,8 +172,12 @@ func TestExport_IgnoresOtherLinkTypes(t *testing.T) {
 	result, err := svc.Export(context.Background(), "TEST-3", Options{})
 
 	require.NoError(t, err)
-	assert.Len(t, result.Task.Frontmatter.JiraDependencies, 1)
-	assert.Contains(t, result.Task.Frontmatter.JiraDependencies, "TEST-1")
+	// InwardIssue goes to JiraBlocks
+	assert.Len(t, result.Task.Frontmatter.JiraBlocks, 1)
+	assert.Contains(t, result.Task.Frontmatter.JiraBlocks, "TEST-1")
+	// OutwardIssue goes to JiraIsBlockedBy
+	assert.Len(t, result.Task.Frontmatter.JiraIsBlockedBy, 1)
+	assert.Contains(t, result.Task.Frontmatter.JiraIsBlockedBy, "TEST-5")
 }
 
 func TestExport_MapToWikiLink_FoundLocally(t *testing.T) {
@@ -182,6 +188,7 @@ func TestExport_MapToWikiLink_FoundLocally(t *testing.T) {
 		Summary: "Test with Local Dependency",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
+			// InwardIssue = issues this task blocks
 			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},
 		},
 	})
@@ -202,8 +209,9 @@ func TestExport_MapToWikiLink_FoundLocally(t *testing.T) {
 	result, err := svc.Export(context.Background(), "TEST-2", Options{})
 
 	require.NoError(t, err)
-	assert.Len(t, result.Task.Frontmatter.JiraDependencies, 1)
-	assert.Equal(t, "[KB-1: Initialize Project](20260114-100000.md)", result.Task.Frontmatter.JiraDependencies[0])
+	// InwardIssue goes to JiraBlocks (issues this task blocks)
+	assert.Len(t, result.Task.Frontmatter.JiraBlocks, 1)
+	assert.Equal(t, "[KB-1: Initialize Project](20260114-100000.md)", result.Task.Frontmatter.JiraBlocks[0])
 }
 
 func TestExport_MapToWikiLink_NotFoundLocally(t *testing.T) {
@@ -214,6 +222,7 @@ func TestExport_MapToWikiLink_NotFoundLocally(t *testing.T) {
 		Summary: "Test with External Dependency",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
+			// InwardIssue = issues this task blocks
 			{ID: "link-1", Type: "Blocks", InwardIssue: "EXTERNAL-99"},
 		},
 	})
@@ -224,9 +233,10 @@ func TestExport_MapToWikiLink_NotFoundLocally(t *testing.T) {
 	result, err := svc.Export(context.Background(), "TEST-2", Options{})
 
 	require.NoError(t, err)
-	assert.Len(t, result.Task.Frontmatter.JiraDependencies, 1)
+	// InwardIssue goes to JiraBlocks (issues this task blocks)
+	assert.Len(t, result.Task.Frontmatter.JiraBlocks, 1)
 	// Should fall back to plain Jira key
-	assert.Equal(t, "EXTERNAL-99", result.Task.Frontmatter.JiraDependencies[0])
+	assert.Equal(t, "EXTERNAL-99", result.Task.Frontmatter.JiraBlocks[0])
 }
 
 func TestExport_HandleMissingParent(t *testing.T) {
@@ -379,10 +389,10 @@ func TestExport_InitializesEmptySlices(t *testing.T) {
 
 	require.NoError(t, err)
 	// Should have empty slices, not nil
-	assert.NotNil(t, result.Task.Frontmatter.JiraDependencies)
-	assert.NotNil(t, result.Task.Frontmatter.JiraDependencies)
-	assert.Empty(t, result.Task.Frontmatter.JiraDependencies)
-	assert.Empty(t, result.Task.Frontmatter.JiraDependencies)
+	assert.NotNil(t, result.Task.Frontmatter.JiraIsBlockedBy)
+	assert.NotNil(t, result.Task.Frontmatter.JiraIsBlockedBy)
+	assert.Empty(t, result.Task.Frontmatter.JiraIsBlockedBy)
+	assert.Empty(t, result.Task.Frontmatter.JiraIsBlockedBy)
 }
 
 func TestParseJiraDatetime(t *testing.T) {

@@ -189,7 +189,7 @@ func TestPushService_LinkDependencies(t *testing.T) {
 						JiraNumber:       "GUARD-101",
 						SyncStatus:       domain.SyncStatusCreated,
 						JiraParent:       "GUARD-100",
-						JiraDependencies: []string{},
+						JiraIsBlockedBy: []string{},
 					},
 				},
 				{
@@ -198,7 +198,7 @@ func TestPushService_LinkDependencies(t *testing.T) {
 						JiraNumber:       "GUARD-102",
 						SyncStatus:       domain.SyncStatusCreated,
 						JiraParent:       "GUARD-100",
-						JiraDependencies: []string{testCase.dependency},
+						JiraIsBlockedBy: []string{testCase.dependency},
 					},
 				},
 			}
@@ -231,7 +231,7 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 				JiraNumber:       "GUARD-101",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
+				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
@@ -240,7 +240,7 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 				JiraNumber:       "GUARD-102",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
+				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
@@ -249,7 +249,7 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 				JiraNumber:       "GUARD-103",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1", "ERR-1"},
+				JiraIsBlockedBy: []string{"KB-1", "ERR-1"},
 			},
 		},
 	}
@@ -273,7 +273,7 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 				JiraNumber:       "GUARD-102",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"invalid-dep"}, // lowercase, not a valid Jira key
+				JiraIsBlockedBy: []string{"invalid-dep"}, // lowercase, not a valid Jira key
 			},
 		},
 	}
@@ -296,7 +296,7 @@ func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
 				JiraNumber:       "GUARD-101",
 				SyncStatus:       domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"GUARD-999"}, // External Jira key, not in local tasks
+				JiraIsBlockedBy: []string{"GUARD-999"}, // External Jira key, not in local tasks
 			},
 		},
 	}

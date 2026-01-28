@@ -66,8 +66,16 @@ func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*R
 	// Generate filename from creation date
 	filename := createdTime.Format("20060102-150405") + ".md"
 
-	// Extract dependencies from issue links
-	deps := s.extractDependencies(issue.Links)
+	// Extract blocking relationships from issue links and map to wiki links
+	blocks, blockedBy := s.extractBlockingRelationships(issue.Links)
+
+	// Map Jira keys to wiki links where local tasks exist
+	for i, key := range blocks {
+		blocks[i] = s.mapToWikiLink(key)
+	}
+	for i, key := range blockedBy {
+		blockedBy[i] = s.mapToWikiLink(key)
+	}
 
 	// Determine parent
 	parent := issue.Parent
@@ -78,17 +86,18 @@ func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*R
 	// Build task file
 	task := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            issue.Summary,
-			JiraNumber:       issue.Key,
-			JiraProject:      issue.Project,
-			JiraType:         issue.IssueType,
-			JiraState:        issue.Status,
-			CreatedDate:      createdTime.Format("2006-01-02"),
-			JiraURL:          issue.URL,
-			SyncStatus:       domain.SyncStatusLinked,
-			JiraParent:       parent,
-			JiraDependencies: deps,
-			LastSynced:       time.Now().UTC().Format(time.RFC3339),
+			Title:           issue.Summary,
+			JiraNumber:      issue.Key,
+			JiraProject:     issue.Project,
+			JiraType:        issue.IssueType,
+			JiraState:       issue.Status,
+			CreatedDate:     createdTime.Format("2006-01-02"),
+			JiraURL:         issue.URL,
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraParent:      parent,
+			JiraBlocks:      blocks,
+			JiraIsBlockedBy: blockedBy,
+			LastSynced:      time.Now().UTC().Format(time.RFC3339),
 		},
 		Description: issue.Description,
 	}
@@ -125,28 +134,40 @@ func parseJiraDatetime(datetime string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("unable to parse datetime: %s", datetime)
 }
 
-// extractDependencies extracts blocking dependencies from issue links.
-// Only considers "Blocks" links where this issue is blocked by another.
-func (s *Service) extractDependencies(links []ports.IssueLink) []string {
+// extractBlockingRelationships extracts blocking relationships from issue links.
+// Returns:
+//   - blocks: issues this task blocks (InwardIssue from "Blocks" links)
+//   - blockedBy: issues that block this task (OutwardIssue from "Blocks" links)
+func (s *Service) extractBlockingRelationships(links []ports.IssueLink) (blocks []string, blockedBy []string) {
 	if links == nil {
-		return []string{}
+		return []string{}, []string{}
 	}
 
-	var deps []string
 	for _, link := range links {
-		// Only consider "Blocks" links where this issue is blocked (InwardIssue is set)
-		if link.Type == "Blocks" && link.InwardIssue != "" {
-			// Try to map to wiki link format
-			wikiLink := s.mapToWikiLink(link.InwardIssue)
-			deps = append(deps, wikiLink)
+		// Only consider "Blocks" or "Blocking" links
+		if link.Type != "Blocks" && link.Type != "Blocking" {
+			continue
+		}
+
+		// InwardIssue = issues this task blocks
+		if link.InwardIssue != "" {
+			blocks = append(blocks, link.InwardIssue)
+		}
+
+		// OutwardIssue = issues that block this task
+		if link.OutwardIssue != "" {
+			blockedBy = append(blockedBy, link.OutwardIssue)
 		}
 	}
 
-	if deps == nil {
-		return []string{}
+	if blocks == nil {
+		blocks = []string{}
+	}
+	if blockedBy == nil {
+		blockedBy = []string{}
 	}
 
-	return deps
+	return blocks, blockedBy
 }
 
 // mapToWikiLink maps a Jira key to wiki link format if task exists locally.

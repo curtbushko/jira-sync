@@ -10,9 +10,9 @@ import (
 func TestHashComputer_ComputeHash(t *testing.T) {
 	task := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Test",
-			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{"KB-0"},
+			Title:           "KB-1: Test",
+			JiraParent:      "GUARD-100",
+			JiraIsBlockedBy: []string{"KB-0"},
 		},
 		Description: "Test description",
 	}
@@ -27,17 +27,19 @@ func TestHashComputer_ComputeHash(t *testing.T) {
 func TestHashComputer_SameContentSameHash(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"A", "B"},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      []string{"A", "B"},
+			JiraIsBlockedBy: []string{"C"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"A", "B"},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      []string{"A", "B"},
+			JiraIsBlockedBy: []string{"C"},
 		},
 		Description: "Desc",
 	}
@@ -77,20 +79,43 @@ func TestHashComputer_DifferentJiraParentDifferentHash(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_DifferentJiraDependenciesDifferentHash(t *testing.T) {
+func TestHashComputer_DifferentJiraBlocksDifferentHash(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"A"},
+			Title:      "Test",
+			JiraParent: "P",
+			JiraBlocks: []string{"A"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"B"},
+			Title:      "Test",
+			JiraParent: "P",
+			JiraBlocks: []string{"B"},
+		},
+		Description: "Desc",
+	}
+
+	hasher := NewSHA256HashComputer()
+
+	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
+}
+
+func TestHashComputer_DifferentJiraIsBlockedByDifferentHash(t *testing.T) {
+	task1 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraIsBlockedBy: []string{"A"},
+		},
+		Description: "Desc",
+	}
+	task2 := &domain.TaskFile{
+		Frontmatter: domain.Frontmatter{
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraIsBlockedBy: []string{"B"},
 		},
 		Description: "Desc",
 	}
@@ -115,20 +140,20 @@ func TestHashComputer_DifferentDescriptionDifferentHash(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_JiraDependencyOrderMatters(t *testing.T) {
+func TestHashComputer_BlockingOrderMatters(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"A", "B"},
+			Title:      "Test",
+			JiraParent: "P",
+			JiraBlocks: []string{"A", "B"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"B", "A"},
+			Title:      "Test",
+			JiraParent: "P",
+			JiraBlocks: []string{"B", "A"},
 		},
 		Description: "Desc",
 	}
@@ -139,28 +164,28 @@ func TestHashComputer_JiraDependencyOrderMatters(t *testing.T) {
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_IgnoresJiraFieldsAndJiraDependencies(t *testing.T) {
+func TestHashComputer_IgnoresMetadataFields(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraNumber:       "",
-			JiraURL:          "",
-			SyncStatus:       "pending",
-			ContentHash:      "",
-			JiraDependencies: []string{"A"},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraNumber:      "",
+			JiraURL:         "",
+			SyncStatus:      "pending",
+			ContentHash:     "",
+			JiraIsBlockedBy: []string{"A"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraNumber:       "GUARD-101",
-			JiraURL:          "https://jira.com/GUARD-101",
-			SyncStatus:       "linked",
-			ContentHash:      "abc123",
-			JiraDependencies: []string{"A"},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraNumber:      "GUARD-101",
+			JiraURL:         "https://jira.com/GUARD-101",
+			SyncStatus:      "linked",
+			ContentHash:     "abc123",
+			JiraIsBlockedBy: []string{"A"},
 		},
 		Description: "Desc",
 	}
@@ -171,20 +196,22 @@ func TestHashComputer_IgnoresJiraFieldsAndJiraDependencies(t *testing.T) {
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_EmptyJiraDependencies(t *testing.T) {
+func TestHashComputer_EmptyBlockingSlices(t *testing.T) {
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: nil,
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      nil,
+			JiraIsBlockedBy: nil,
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
 		},
 		Description: "Desc",
 	}
@@ -195,28 +222,29 @@ func TestHashComputer_EmptyJiraDependencies(t *testing.T) {
 	assert.Equal(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
 
-func TestHashComputer_JiraDependenciesIncluded(t *testing.T) {
-	// Test that changing jira-dependencies changes the hash
+func TestHashComputer_BlockingFieldsIncluded(t *testing.T) {
+	// Test that changing blocking fields changes the hash
 	task1 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"A", "B"},
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      []string{"A", "B"},
+			JiraIsBlockedBy: []string{"C"},
 		},
 		Description: "Desc",
 	}
 	task2 := &domain.TaskFile{
 		Frontmatter: domain.Frontmatter{
-			Title:            "Test",
-			JiraParent:       "P",
-			JiraDependencies: []string{"C", "D", "E"}, // Different jira deps
+			Title:           "Test",
+			JiraParent:      "P",
+			JiraBlocks:      []string{"C", "D", "E"},
+			JiraIsBlockedBy: []string{"F"},
 		},
 		Description: "Desc",
 	}
 
 	hasher := NewSHA256HashComputer()
 
-	// Hash should be different since jira-dependencies are included
+	// Hash should be different since blocking fields are included
 	assert.NotEqual(t, hasher.ComputeHash(task1), hasher.ComputeHash(task2))
 }
-

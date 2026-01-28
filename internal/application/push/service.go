@@ -134,47 +134,96 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 }
 
 // LinkDependencies creates dependency links in Jira for all tasks.
-// Uses jira-dependencies which can contain either:
-//   - Local task IDs (e.g., "KB-1") that map to Jira keys
-//   - Direct Jira keys (e.g., "GUARD-1519") for external dependencies
+// Creates links based on:
+//   - jira-blocks: issues this task blocks (we are the blocker)
+//   - jira-is-blocked-by: issues that block this task (we are blocked)
 func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile, linkType string) error {
-	// Build task ID to Jira key map (and Jira key to itself for external deps)
+	// Build task ID to Jira key map
 	idMap := s.BuildTaskIDMap(tasks)
 
-	// Create links for each task based on jira-dependencies
+	// Create links for each task
 	for _, task := range tasks {
-		// Extract task IDs from jira-dependencies (handles wiki link format)
-		depIDs := task.JiraDependencyIDs()
-		if len(depIDs) == 0 {
+		thisIssue := task.Frontmatter.JiraNumber
+		hasLinks := false
+
+		// Process jira-blocks: this task blocks other issues
+		// CreateLink(inward=blocked, outward=blocker) -> this task is blocker
+		for _, blockedID := range task.Frontmatter.JiraBlocks {
+			blockedIssue, err := s.resolveJiraKey(blockedID, idMap)
+			if err != nil {
+				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, blockedID, task.Frontmatter.Title)
+			}
+
+			// Create link: blockedIssue is blocked by thisIssue
+			if err := s.jira.CreateLink(ctx, blockedIssue, thisIssue, linkType); err != nil {
+				return fmt.Errorf("link %s blocks %s: %w", thisIssue, blockedIssue, err)
+			}
+			hasLinks = true
+		}
+
+		// Process jira-is-blocked-by: this task is blocked by other issues
+		// CreateLink(inward=blocked, outward=blocker) -> this task is blocked
+		for _, blockerID := range task.Frontmatter.JiraIsBlockedBy {
+			blockerIssue, err := s.resolveJiraKey(blockerID, idMap)
+			if err != nil {
+				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, blockerID, task.Frontmatter.Title)
+			}
+
+			// Create link: thisIssue is blocked by blockerIssue
+			if err := s.jira.CreateLink(ctx, thisIssue, blockerIssue, linkType); err != nil {
+				return fmt.Errorf("link %s is blocked by %s: %w", thisIssue, blockerIssue, err)
+			}
+			hasLinks = true
+		}
+
+		// Mark as linked if we processed any links or there were none to process
+		if hasLinks || (len(task.Frontmatter.JiraBlocks) == 0 && len(task.Frontmatter.JiraIsBlockedBy) == 0) {
 			task.Frontmatter.SyncStatus = domain.SyncStatusLinked
-			continue
 		}
-
-		blockedIssue := task.Frontmatter.JiraNumber
-
-		for _, depID := range depIDs {
-			blockerIssue, ok := idMap[depID]
-			if !ok {
-				// Not in local task map - check if it looks like a Jira key
-				// Jira keys are typically PROJECT-NUMBER (e.g., GUARD-1519)
-				if isJiraKey(depID) {
-					// Use the dependency ID directly as the Jira key
-					blockerIssue = depID
-				} else {
-					return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, depID, task.Frontmatter.Title)
-				}
-			}
-
-			// Create link: blockedIssue is blocked by blockerIssue
-			if err := s.jira.CreateLink(ctx, blockedIssue, blockerIssue, linkType); err != nil {
-				return fmt.Errorf("link %s -> %s: %w", blockerIssue, blockedIssue, err)
-			}
-		}
-
-		task.Frontmatter.SyncStatus = domain.SyncStatusLinked
 	}
 
 	return nil
+}
+
+// resolveJiraKey resolves an ID to a Jira key.
+// Handles multiple formats:
+//   - Plain task ID: "KB-1"
+//   - Wiki link format: "[KB-1: Title](filename.md)"
+//   - Jira key: "GUARD-123"
+func (s *Service) resolveJiraKey(depID string, idMap map[string]string) (string, error) {
+	// Parse wiki link format if present: [Title](file.md)
+	resolvedID := parseWikiLink(depID)
+
+	// Check if it's in the local task map
+	if jiraKey, ok := idMap[resolvedID]; ok {
+		return jiraKey, nil
+	}
+
+	// Check if it looks like a Jira key already
+	if isJiraKey(resolvedID) {
+		return resolvedID, nil
+	}
+
+	return "", fmt.Errorf("cannot resolve %s to Jira key", depID)
+}
+
+// parseWikiLink extracts the task ID from a wiki link format.
+// "[KB-1: Title](file.md)" -> "KB-1"
+// Returns the original string if not a wiki link.
+func parseWikiLink(wikiLink string) string {
+	if !strings.HasPrefix(wikiLink, "[") {
+		return wikiLink
+	}
+
+	// Find the end of the title part
+	closeIdx := strings.Index(wikiLink, "]")
+	if closeIdx == -1 {
+		return wikiLink
+	}
+
+	title := wikiLink[1:closeIdx]
+	// Extract task ID from title
+	return extractTaskID(title)
 }
 
 // isJiraKey checks if a string looks like a Jira issue key (PROJECT-NUMBER).

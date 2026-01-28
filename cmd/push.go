@@ -315,9 +315,16 @@ func buildPushTaskMap(tasks []*domain.TaskFile) map[string]*domain.TaskFile {
 }
 
 func printPushLinkedDependencies(task *domain.TaskFile, taskMap map[string]*domain.TaskFile) {
-	for _, dep := range task.Frontmatter.JiraDependencies {
-		if depTask, ok := taskMap[dep]; ok {
-			color.Green("[OK] %s blocked by %s", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)
+	// Print issues that this task blocks
+	for _, blockedID := range task.Frontmatter.JiraBlocks {
+		if blockedTask, ok := taskMap[blockedID]; ok {
+			color.Green("[OK] %s blocks %s", task.Frontmatter.JiraNumber, blockedTask.Frontmatter.JiraNumber)
+		}
+	}
+	// Print issues that block this task
+	for _, blockerID := range task.Frontmatter.JiraIsBlockedBy {
+		if blockerTask, ok := taskMap[blockerID]; ok {
+			color.Green("[OK] %s is blocked by %s", task.Frontmatter.JiraNumber, blockerTask.Frontmatter.JiraNumber)
 		}
 	}
 }
@@ -361,24 +368,34 @@ func showPushDependenciesToLink(created []*domain.TaskFile, allTasks []*domain.T
 
 	var hasLinks bool
 	for _, task := range created {
-		if len(task.Frontmatter.JiraDependencies) == 0 {
+		if len(task.Frontmatter.JiraBlocks) == 0 && len(task.Frontmatter.JiraIsBlockedBy) == 0 {
 			continue
 		}
 		if !hasLinks {
-			fmt.Println("\nJira-dependencies to link:")
+			fmt.Println("\nBlocking relationships to link:")
 			hasLinks = true
 		}
-		printPushDependencyLinks(task, idMap)
+		printPushBlockingLinks(task, idMap)
 	}
 }
 
-func printPushDependencyLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFile) {
-	for _, depID := range task.Frontmatter.JiraDependencies {
-		depTask := idMap[depID]
-		if depTask != nil && depTask.Frontmatter.JiraNumber != "" {
-			fmt.Printf("  - %s blocked by %s\n", task.Frontmatter.JiraNumber, depTask.Frontmatter.JiraNumber)
+func printPushBlockingLinks(task *domain.TaskFile, idMap map[string]*domain.TaskFile) {
+	// Print issues this task blocks
+	for _, blockedID := range task.Frontmatter.JiraBlocks {
+		blockedTask := idMap[blockedID]
+		if blockedTask != nil && blockedTask.Frontmatter.JiraNumber != "" {
+			fmt.Printf("  - %s blocks %s\n", task.Frontmatter.JiraNumber, blockedTask.Frontmatter.JiraNumber)
 		} else {
-			fmt.Printf("  - %s blocked by %s (pending)\n", task.TaskID(), depID)
+			fmt.Printf("  - %s blocks %s (pending)\n", task.TaskID(), blockedID)
+		}
+	}
+	// Print issues that block this task
+	for _, blockerID := range task.Frontmatter.JiraIsBlockedBy {
+		blockerTask := idMap[blockerID]
+		if blockerTask != nil && blockerTask.Frontmatter.JiraNumber != "" {
+			fmt.Printf("  - %s is blocked by %s\n", task.Frontmatter.JiraNumber, blockerTask.Frontmatter.JiraNumber)
+		} else {
+			fmt.Printf("  - %s is blocked by %s (pending)\n", task.TaskID(), blockerID)
 		}
 	}
 }

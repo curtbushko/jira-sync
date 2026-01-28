@@ -128,8 +128,11 @@ func runExport(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Parent: %s\n", result.Task.Frontmatter.JiraParent)
 	}
 
-	if len(result.Task.Frontmatter.JiraDependencies) > 0 {
-		fmt.Printf("  Dependencies: %s\n", strings.Join(result.Task.Frontmatter.JiraDependencies, ", "))
+	if len(result.Task.Frontmatter.JiraBlocks) > 0 {
+		fmt.Printf("  Blocks: %s\n", strings.Join(result.Task.Frontmatter.JiraBlocks, ", "))
+	}
+	if len(result.Task.Frontmatter.JiraIsBlockedBy) > 0 {
+		fmt.Printf("  Is Blocked By: %s\n", strings.Join(result.Task.Frontmatter.JiraIsBlockedBy, ", "))
 	}
 
 	color.Green("\nExported: %s", outputPath)

@@ -40,7 +40,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 				Title:        "KB-1: Initialize Project",
 				SyncStatus:   domain.SyncStatusPending,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
+				JiraIsBlockedBy: []string{},
 			},
 			Description: "Initialize the project repository.",
 		},
@@ -50,7 +50,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 				Title:        "KB-2: Create Types",
 				SyncStatus:   domain.SyncStatusPending,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"},
+				JiraIsBlockedBy: []string{"KB-1"},
 			},
 			Description: "Create shared type definitions.",
 		},
@@ -60,7 +60,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 				Title:        "ERR-1: Detector Stub",
 				SyncStatus:   domain.SyncStatusPending,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"},
+				JiraIsBlockedBy: []string{"KB-1"},
 			},
 			Description: "Create detector stub implementation.",
 		},
@@ -70,7 +70,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 				Title:        "CTRL-1: Controller Scaffold",
 				SyncStatus:   domain.SyncStatusPending,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-2", "ERR-1"},
+				JiraIsBlockedBy: []string{"KB-2", "ERR-1"},
 			},
 			Description: "Create controller scaffold.",
 		},
@@ -190,7 +190,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				JiraNumber:   "GUARD-101",
 				SyncStatus:   domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{},
+				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
@@ -200,7 +200,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				JiraNumber:   "GUARD-102",
 				SyncStatus:   domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"},
+				JiraIsBlockedBy: []string{"KB-1"},
 			},
 		},
 		{
@@ -210,7 +210,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				JiraNumber:   "GUARD-103",
 				SyncStatus:   domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-1"},
+				JiraIsBlockedBy: []string{"KB-1"},
 			},
 		},
 		{
@@ -220,7 +220,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 				JiraNumber:   "GUARD-104",
 				SyncStatus:   domain.SyncStatusCreated,
 				JiraParent:       "GUARD-100",
-				JiraDependencies: []string{"KB-2", "KB-3"},
+				JiraIsBlockedBy: []string{"KB-2", "KB-3"},
 			},
 		},
 	}
@@ -262,7 +262,7 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
 			SyncStatus:       domain.SyncStatusLinked,
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{"KB-1", "KB-2", "ERR-1"},
+			JiraIsBlockedBy: []string{"KB-1", "KB-2", "ERR-1"},
 			ContentHash:      "somehash123",
 		},
 		Description: `Implement pod listing logic.
@@ -289,7 +289,7 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
 	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)
-	assert.Equal(t, original.Frontmatter.JiraDependencies, loaded.Frontmatter.JiraDependencies)
+	assert.Equal(t, original.Frontmatter.JiraIsBlockedBy, loaded.Frontmatter.JiraIsBlockedBy)
 	assert.Equal(t, original.Frontmatter.ContentHash, loaded.Frontmatter.ContentHash)
 	assert.Equal(t, original.Description, loaded.Description)
 }

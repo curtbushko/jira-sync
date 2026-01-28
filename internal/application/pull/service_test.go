@@ -77,7 +77,7 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 		Frontmatter: domain.Frontmatter{
 			Title:            "KB-1: Task 1",
 			JiraNumber:       "GUARD-101",
-			JiraDependencies: nil,
+			JiraIsBlockedBy: nil,
 		},
 	}
 
@@ -92,8 +92,9 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 
 	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
 		return []ports.IssueLink{
-			{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},
-			{Type: "Blocking", InwardIssue: "GUARD-103", OutwardIssue: ""},
+			// OutwardIssue = issues that block this task (goes to JiraIsBlockedBy)
+			{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"},
+			{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-103"},
 		}, nil
 	}
 
@@ -102,9 +103,9 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 	result := svc.PullTask(context.Background(), task)
 
 	require.NoError(t, result.Error)
-	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, task.Frontmatter.JiraDependencies)
-	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, result.Dependencies)
-	assert.True(t, result.UpdatedDeps)
+	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, task.Frontmatter.JiraIsBlockedBy)
+	assert.ElementsMatch(t, []string{"GUARD-102", "GUARD-103"}, result.JiraIsBlockedBy)
+	assert.True(t, result.UpdatedLinks)
 }
 
 func TestPullTask_HandlesError(t *testing.T) {

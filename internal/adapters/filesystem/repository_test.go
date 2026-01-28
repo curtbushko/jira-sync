@@ -68,7 +68,7 @@ func TestTaskRepository_WriteTask(t *testing.T) {
 			JiraURL:          "",
 			SyncStatus:       "pending",
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{},
+			JiraIsBlockedBy: []string{},
 			ContentHash:      "",
 			LastSynced:       "",
 		},
@@ -232,7 +232,7 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
 			SyncStatus:       "linked",
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{"KB-1", "KB-2", "ERR-1"},
+			JiraIsBlockedBy: []string{"KB-1", "KB-2", "ERR-1"},
 			ContentHash:      "somehash123",
 			LastSynced:       "2026-01-16T10:00:00Z",
 		},
@@ -262,7 +262,7 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.JiraURL, loaded.Frontmatter.JiraURL)
 	assert.Equal(t, original.Frontmatter.SyncStatus, loaded.Frontmatter.SyncStatus)
 	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)
-	assert.Equal(t, original.Frontmatter.JiraDependencies, loaded.Frontmatter.JiraDependencies)
+	assert.Equal(t, original.Frontmatter.JiraIsBlockedBy, loaded.Frontmatter.JiraIsBlockedBy)
 	assert.Equal(t, original.Frontmatter.ContentHash, loaded.Frontmatter.ContentHash)
 	assert.Equal(t, original.Frontmatter.LastSynced, loaded.Frontmatter.LastSynced)
 	assert.Equal(t, original.Description, loaded.Description)

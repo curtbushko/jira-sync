@@ -17,6 +17,13 @@ func NewParser() *Parser {
 	return &Parser{}
 }
 
+// frontmatterWithLegacy includes legacy fields for backward compatibility parsing.
+type frontmatterWithLegacy struct {
+	domain.Frontmatter `yaml:",inline"`
+	// Legacy field - maps to JiraIsBlockedBy
+	JiraDependencies []string `yaml:"jira-dependencies"`
+}
+
 // Parse parses a markdown file content and returns a TaskFile.
 func (p *Parser) Parse(path, content string) (*domain.TaskFile, error) {
 	frontmatter, body, err := p.splitFrontmatter(content)
@@ -24,18 +31,23 @@ func (p *Parser) Parse(path, content string) (*domain.TaskFile, error) {
 		return nil, domain.NewParseError(path, err)
 	}
 
-	var frontmatterData domain.Frontmatter
-	if err := yaml.Unmarshal([]byte(frontmatter), &frontmatterData); err != nil {
+	var legacyData frontmatterWithLegacy
+	if err := yaml.Unmarshal([]byte(frontmatter), &legacyData); err != nil {
 		return nil, domain.NewParseError(path, fmt.Errorf("parse yaml: %w", err))
 	}
 
-	if err := p.validate(&frontmatterData); err != nil {
+	// Migrate legacy jira-dependencies to jira-is-blocked-by
+	if len(legacyData.JiraDependencies) > 0 && len(legacyData.JiraIsBlockedBy) == 0 {
+		legacyData.JiraIsBlockedBy = legacyData.JiraDependencies
+	}
+
+	if err := p.validate(&legacyData.Frontmatter); err != nil {
 		return nil, domain.NewParseError(path, err)
 	}
 
 	task := &domain.TaskFile{
 		Path:        path,
-		Frontmatter: frontmatterData,
+		Frontmatter: legacyData.Frontmatter,
 		Description: strings.TrimSpace(body),
 	}
 

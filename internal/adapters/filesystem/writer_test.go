@@ -20,7 +20,7 @@ func TestWriter_Marshal_ValidTask(t *testing.T) {
 			JiraURL:          "",
 			SyncStatus:       "pending",
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{},
+			JiraIsBlockedBy: []string{},
 			ContentHash:      "",
 			LastSynced:       "",
 		},
@@ -52,7 +52,7 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 			JiraURL:          "https://company.atlassian.net/browse/GUARD-102",
 			SyncStatus:       "linked",
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{"KB-3", "ERR-1"},
+			JiraIsBlockedBy: []string{"KB-3", "ERR-1"},
 			ContentHash:      "abc123",
 			LastSynced:       "2026-01-16T10:00:00Z",
 		},
@@ -65,7 +65,7 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, content, "jira-number: GUARD-102")
 	assert.Contains(t, content, "jira-url: https://company.atlassian.net/browse/GUARD-102")
-	assert.Contains(t, content, "jira-dependencies:")
+	assert.Contains(t, content, "jira-is-blocked-by:")
 	assert.Contains(t, content, "KB-3")
 	assert.Contains(t, content, "ERR-1")
 	assert.Contains(t, content, "content-hash: abc123")
@@ -73,7 +73,7 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 	assert.Contains(t, content, "2026-01-16T10:00:00Z")
 }
 
-func TestWriter_Marshal_WithJiraDependencies(t *testing.T) {
+func TestWriter_Marshal_WithJiraIsBlockedBy(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
@@ -82,7 +82,7 @@ func TestWriter_Marshal_WithJiraDependencies(t *testing.T) {
 			JiraState:        "Todo",
 			SyncStatus:       "pending",
 			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{"KB-1", "KB-2"},
+			JiraIsBlockedBy: []string{"KB-1", "KB-2"},
 		},
 		Description: "Test",
 	}
@@ -91,19 +91,20 @@ func TestWriter_Marshal_WithJiraDependencies(t *testing.T) {
 	content, err := writer.Marshal(task)
 
 	require.NoError(t, err)
-	assert.Contains(t, content, "jira-dependencies: [KB-1, KB-2]")
+	assert.Contains(t, content, "jira-is-blocked-by: [KB-1, KB-2]")
 }
 
 func TestWriter_Marshal_EmptyDependencies(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Test",
-			JiraProject:      "GUARD",
-			JiraState:        "Todo",
-			SyncStatus:       "pending",
-			JiraParent:       "GUARD-100",
-			JiraDependencies: []string{},
+			Title:           "KB-1: Test",
+			JiraProject:     "GUARD",
+			JiraState:       "Todo",
+			SyncStatus:      "pending",
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
 		},
 		Description: "Test",
 	}
@@ -112,19 +113,21 @@ func TestWriter_Marshal_EmptyDependencies(t *testing.T) {
 	content, err := writer.Marshal(task)
 
 	require.NoError(t, err)
-	assert.Contains(t, content, "jira-dependencies: []")
+	assert.Contains(t, content, "jira-blocks: []")
+	assert.Contains(t, content, "jira-is-blocked-by: []")
 }
 
 func TestWriter_Marshal_NilDependencies(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Test",
-			JiraProject:      "GUARD",
-			JiraState:        "Todo",
-			SyncStatus:       "pending",
-			JiraParent:       "GUARD-100",
-			JiraDependencies: nil,
+			Title:           "KB-1: Test",
+			JiraProject:     "GUARD",
+			JiraState:       "Todo",
+			SyncStatus:      "pending",
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      nil,
+			JiraIsBlockedBy: nil,
 		},
 		Description: "Test",
 	}
@@ -133,7 +136,9 @@ func TestWriter_Marshal_NilDependencies(t *testing.T) {
 	content, err := writer.Marshal(task)
 
 	require.NoError(t, err)
-	assert.Contains(t, content, "jira-dependencies: []")
+	// Nil slices should be output as empty arrays
+	assert.Contains(t, content, "jira-blocks: []")
+	assert.Contains(t, content, "jira-is-blocked-by: []")
 }
 
 func TestWriter_Marshal_MultilineDescription(t *testing.T) {

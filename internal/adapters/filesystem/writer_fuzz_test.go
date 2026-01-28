@@ -67,7 +67,7 @@ func FuzzWriter_Marshal(f *testing.F) {
 				SyncStatus:       syncStatus,
 				JiraParent:       parent,
 				ContentHash:      contentHash,
-				JiraDependencies: []string{}, // Start with empty deps
+				JiraIsBlockedBy: []string{}, // Start with empty deps
 			},
 			Description: description,
 		}
@@ -123,7 +123,7 @@ func FuzzWriter_MarshalWithDependencies(f *testing.F) {
 				Title:            "KB-1: Test",
 				SyncStatus:       "pending",
 				JiraParent:       "GUARD-100",
-				JiraDependencies: deps,
+				JiraIsBlockedBy: deps,
 			},
 			Description: "Test description",
 		}

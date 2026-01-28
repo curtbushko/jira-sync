@@ -7,7 +7,7 @@ import (
 )
 
 // TopologicalSort orders tasks so that dependencies come before dependent tasks.
-// It uses jira-dependencies to determine ordering.
+// It uses jira-is-blocked-by to determine ordering (tasks we depend on must be created first).
 //
 // Parameters:
 //   - pending: tasks to sort (typically tasks with sync-status: pending)
@@ -48,14 +48,17 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		inDegree[taskID] = 0
 	}
 
-	// Process dependencies
+	// Process dependencies (jira-is-blocked-by = issues that block this task)
 	for _, task := range pending {
 		taskID := task.TaskID()
-		depIDs := task.JiraDependencyIDs()
+		blockedByIDs := task.Frontmatter.JiraIsBlockedBy
 
-		for _, depID := range depIDs {
+		for _, depID := range blockedByIDs {
+			// Parse wiki link format if present: [Title](file.md) -> task ID
+			resolvedDepID := parseWikiLink(depID)
+
 			// Check if dependency exists (either as local task ID or Jira key)
-			depTask, exists := taskByID[depID]
+			depTask, exists := taskByID[resolvedDepID]
 			if !exists {
 				// Dependency not found locally - assume it's an external Jira issue
 				// that already exists (e.g., GUARD-1519)

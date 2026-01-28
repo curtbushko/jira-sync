@@ -69,7 +69,8 @@ Old task description.`
 	// Should contain migrated fields
 	assert.Contains(t, contentStr, "jira-state: Todo")
 	assert.Contains(t, contentStr, "sync-status: pending")
-	assert.Contains(t, contentStr, "jira-dependencies: []")
+	assert.Contains(t, contentStr, "jira-blocks: []")
+	assert.Contains(t, contentStr, "jira-is-blocked-by: []")
 }
 
 func TestMigrateCommand_DefaultProject(t *testing.T) {

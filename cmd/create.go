@@ -106,18 +106,19 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	task := &domain.TaskFile{
 		Path: filePath,
 		Frontmatter: domain.Frontmatter{
-			Title:            title,
-			JiraNumber:       "",
-			JiraProject:      jiraProject,
-			JiraType:         jiraType,
-			JiraState:        domain.DefaultJiraState,
-			CreatedDate:      now.Format("2006-01-02"),
-			JiraURL:          "",
-			SyncStatus:       domain.SyncStatusPending,
-			JiraParent:       jiraParent,
-			JiraDependencies: jiraDeps,
-			ContentHash:      "",
-			LastSynced:       "",
+			Title:           title,
+			JiraNumber:      "",
+			JiraProject:     jiraProject,
+			JiraType:        jiraType,
+			JiraState:       domain.DefaultJiraState,
+			CreatedDate:     now.Format("2006-01-02"),
+			JiraURL:         "",
+			SyncStatus:      domain.SyncStatusPending,
+			JiraParent:      jiraParent,
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: jiraDeps, // deps = issues that block this task
+			ContentHash:     "",
+			LastSynced:      "",
 		},
 		Description: description,
 	}
@@ -137,7 +138,7 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 		fmt.Printf("  Jira-Project: %s\n", jiraProject)
 	}
 	if len(jiraDeps) > 0 {
-		fmt.Printf("  Jira-Dependencies: %s\n", strings.Join(jiraDeps, ", "))
+		fmt.Printf("  Jira-Is-Blocked-By: %s\n", strings.Join(jiraDeps, ", "))
 	}
 
 	return nil

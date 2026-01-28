@@ -18,42 +18,49 @@ func NewWriter() *Writer {
 
 // frontmatterOutput is the struct used for YAML output with explicit field ordering.
 type frontmatterOutput struct {
-	Title            string   `yaml:"title"`
-	JiraNumber       string   `yaml:"jira-number"`
-	JiraProject      string   `yaml:"jira-project"`
-	JiraType         string   `yaml:"jira-type"`
-	JiraState        string   `yaml:"jira-state"`
-	CreatedDate      string   `yaml:"created-date"`
-	JiraURL          string   `yaml:"jira-url"`
-	SyncStatus       string   `yaml:"sync-status"`
-	JiraParent       string   `yaml:"jira-parent"`
-	JiraDependencies []string `yaml:"jira-dependencies,flow"`
-	ContentHash      string   `yaml:"content-hash"`
-	LastSynced       string   `yaml:"last-synced"`
+	Title           string   `yaml:"title"`
+	JiraNumber      string   `yaml:"jira-number"`
+	JiraProject     string   `yaml:"jira-project"`
+	JiraType        string   `yaml:"jira-type"`
+	JiraState       string   `yaml:"jira-state"`
+	CreatedDate     string   `yaml:"created-date"`
+	JiraURL         string   `yaml:"jira-url"`
+	SyncStatus      string   `yaml:"sync-status"`
+	JiraParent      string   `yaml:"jira-parent"`
+	JiraBlocks      []string `yaml:"jira-blocks,flow"`
+	JiraIsBlockedBy []string `yaml:"jira-is-blocked-by,flow"`
+	ContentHash     string   `yaml:"content-hash"`
+	LastSynced      string   `yaml:"last-synced"`
 }
 
 // Marshal converts a TaskFile to markdown content with YAML frontmatter.
 func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
-	// Ensure dependencies are never nil for consistent output
-	jiraDeps := task.Frontmatter.JiraDependencies
-	if jiraDeps == nil {
-		jiraDeps = []string{}
+	// Ensure slices are never nil for consistent output
+	jiraBlocks := task.Frontmatter.JiraBlocks
+	if jiraBlocks == nil {
+		jiraBlocks = []string{}
+	}
+
+	jiraIsBlockedBy := task.Frontmatter.JiraIsBlockedBy
+	if jiraIsBlockedBy == nil {
+		jiraIsBlockedBy = []string{}
 	}
 
 	// Create output struct with proper field ordering
 	out := frontmatterOutput{
-		Title:            task.Frontmatter.Title,
-		JiraNumber:       task.Frontmatter.JiraNumber,
-		JiraProject:      task.Frontmatter.JiraProject,
-		JiraType:         task.Frontmatter.JiraType,
-		JiraState:        task.Frontmatter.JiraState,
-		CreatedDate:      task.Frontmatter.CreatedDate,
-		JiraURL:          task.Frontmatter.JiraURL,
-		SyncStatus:       task.Frontmatter.SyncStatus,
-		JiraParent:       task.Frontmatter.JiraParent,
-		JiraDependencies: jiraDeps,
-		ContentHash:      task.Frontmatter.ContentHash,
-		LastSynced:       task.Frontmatter.LastSynced,
+		Title:           task.Frontmatter.Title,
+		JiraNumber:      task.Frontmatter.JiraNumber,
+		JiraProject:     task.Frontmatter.JiraProject,
+		JiraType:        task.Frontmatter.JiraType,
+		JiraState:       task.Frontmatter.JiraState,
+		CreatedDate:     task.Frontmatter.CreatedDate,
+		JiraURL:         task.Frontmatter.JiraURL,
+		SyncStatus:      task.Frontmatter.SyncStatus,
+		JiraParent:      task.Frontmatter.JiraParent,
+		JiraBlocks:      jiraBlocks,
+		JiraIsBlockedBy: jiraIsBlockedBy,
+		ContentHash:     task.Frontmatter.ContentHash,
+		LastSynced:      task.Frontmatter.LastSynced,
 	}
 
 	var buf bytes.Buffer
