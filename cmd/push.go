@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -85,9 +86,20 @@ func init() {
 func runPush(cmd *cobra.Command, args []string) error {
 	flags := parsePushFlags(cmd, args)
 
+	slog.Debug("push command started",
+		slog.String("tasks_dir", flags.tasksDir),
+		slog.String("project", flags.project),
+		slog.Bool("dry_run", flags.dryRun),
+		slog.Bool("skip_confirm", flags.skipConfirm),
+		slog.Bool("create_only", flags.createOnly),
+		slog.Bool("link_only", flags.linkOnly),
+		slog.Bool("status_only", flags.statusOnly),
+	)
+
 	repo := filesystem.NewFileTaskRepository()
 	tasks, categorized, err := loadAndCategorizePushTasks(flags.tasksDir, repo)
 	if err != nil {
+		slog.Debug("failed to load and categorize tasks", slog.String("error", err.Error()))
 		return err
 	}
 
@@ -146,21 +158,34 @@ func parsePushFlags(cmd *cobra.Command, args []string) pushFlags {
 }
 
 func loadAndCategorizePushTasks(tasksDir string, repo ports.TaskRepository) ([]*domain.TaskFile, *push.CategorizedTasks, error) {
+	slog.Debug("scanning directory for tasks", slog.String("tasks_dir", tasksDir))
 	color.Cyan("Scanning %s...\n", tasksDir)
 
 	tasks, err := repo.ListTasks(tasksDir)
 	if err != nil {
+		slog.Debug("failed to list tasks", slog.String("error", err.Error()))
 		return nil, nil, fmt.Errorf("parse tasks: %w", err)
 	}
+
+	slog.Debug("found total tasks", slog.Int("count", len(tasks)))
 
 	hasher := hashing.NewSHA256HashComputer()
 	svc := push.NewService(repo, nil, hasher)
 	categorized := svc.CategorizeTasks(tasks)
 
+	slog.Debug("categorized tasks",
+		slog.Int("pending", len(categorized.Pending)),
+		slog.Int("created", len(categorized.Created)),
+		slog.Int("linked", len(categorized.Linked)),
+		slog.Int("needs_update", len(categorized.NeedsUpdate)),
+	)
+
 	// Topologically sort pending tasks by jira-dependencies
 	if len(categorized.Pending) > 0 {
+		slog.Debug("sorting pending tasks topologically", slog.Int("count", len(categorized.Pending)))
 		sorted, err := push.TopologicalSort(categorized.Pending, tasks)
 		if err != nil {
+			slog.Debug("topological sort failed", slog.String("error", err.Error()))
 			return nil, nil, fmt.Errorf("dependency error: %w", err)
 		}
 		categorized.Pending = sorted
@@ -198,9 +223,17 @@ func confirmPush(taskCount int) bool {
 }
 
 func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
+	slog.Debug("creating push context")
+
 	jiraURL := viper.GetString("jira.url")
 	jiraUser := viper.GetString("jira.user")
 	jiraToken := viper.GetString("token")
+
+	slog.Debug("jira config",
+		slog.String("jira_url", jiraURL),
+		slog.String("jira_user", jiraUser),
+		slog.Bool("has_token", jiraToken != ""),
+	)
 
 	if jiraURL == "" {
 		return nil, errJiraURLRequired
@@ -214,6 +247,7 @@ func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 
 	jiraClient, err := jira.NewClient(jiraURL, jiraUser, jiraToken)
 	if err != nil {
+		slog.Debug("failed to create jira client", slog.String("error", err.Error()))
 		return nil, fmt.Errorf("create jira client: %w", err)
 	}
 
@@ -230,6 +264,11 @@ func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 		linkType = domain.DefaultLinkType
 	}
 
+	slog.Debug("push context created",
+		slog.String("issue_type", issueType),
+		slog.String("link_type", linkType),
+	)
+
 	return &pushContext{
 		repo:       repo,
 		jiraClient: jiraClient,
@@ -241,6 +280,8 @@ func createPushContext(repo ports.TaskRepository) (*pushContext, error) {
 }
 
 func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
+	slog.Debug("starting push execution phases")
+
 	if err := executePushCreatePhase(ctx, flags, pushCtx, categorized); err != nil {
 		return err
 	}
@@ -253,50 +294,74 @@ func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContex
 		return err
 	}
 
+	slog.Debug("push execution completed successfully")
 	color.Green("\n[OK] Push complete")
 	return nil
 }
 
 func executePushCreatePhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks) error {
 	if flags.linkOnly || len(categorized.Pending) == 0 {
+		slog.Debug("skipping create phase",
+			slog.Bool("link_only", flags.linkOnly),
+			slog.Int("pending_count", len(categorized.Pending)),
+		)
 		return nil
 	}
 
+	slog.Debug("starting create phase", slog.Int("pending_count", len(categorized.Pending)))
 	color.Cyan("\nCreating tickets...\n")
 	if err := pushCtx.service.CreateTickets(ctx, categorized.Pending, flags.project, pushCtx.issueType); err != nil {
+		slog.Debug("failed to create tickets", slog.String("error", err.Error()))
 		return fmt.Errorf("create tickets: %w", err)
 	}
 
 	// Transition newly created issues to match local jira-state
+	slog.Debug("transitioning newly created issues")
 	transitioned, err := pushCtx.service.TransitionIssues(ctx, categorized.Pending)
 	if err != nil {
+		slog.Debug("failed to transition issues", slog.String("error", err.Error()))
 		return fmt.Errorf("transition issues: %w", err)
 	}
 	if transitioned > 0 {
+		slog.Debug("transitioned issues", slog.Int("count", transitioned))
 		color.Cyan("Transitioned %d issue(s) to target state\n", transitioned)
 	}
 
 	for _, task := range categorized.Pending {
+		slog.Debug("saving created task",
+			slog.String("task", task.TaskID()),
+			slog.String("jira_key", task.Frontmatter.JiraNumber),
+			slog.String("path", task.Path),
+		)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
+			slog.Debug("failed to save task", slog.String("path", task.Path), slog.String("error", err.Error()))
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
 		color.Green("[OK] %s -> %s", task.TaskID(), task.Frontmatter.JiraNumber)
 	}
 
 	categorized.Created = append(categorized.Created, categorized.Pending...)
+	slog.Debug("create phase completed", slog.Int("created_count", len(categorized.Pending)))
 	return nil
 }
 
 func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if flags.createOnly || len(categorized.Created) == 0 {
+		slog.Debug("skipping link phase",
+			slog.Bool("create_only", flags.createOnly),
+			slog.Int("created_count", len(categorized.Created)),
+		)
 		return nil
 	}
 
+	slog.Debug("starting link phase", slog.Int("created_count", len(categorized.Created)))
 	color.Cyan("\nLinking dependencies...\n")
 	if err := pushCtx.service.LinkDependencies(ctx, categorized.Created, tasks, pushCtx.linkType); err != nil {
+		slog.Debug("failed to link dependencies", slog.String("error", err.Error()))
 		return fmt.Errorf("link dependencies: %w", err)
 	}
 
+	slog.Debug("link phase completed")
 	return savePushLinkedTasks(pushCtx, categorized.Created, tasks)
 }
 
@@ -340,39 +405,55 @@ func printPushLinkedDependencies(task *domain.TaskFile, taskMap map[string]*doma
 
 func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if len(categorized.NeedsUpdate) == 0 {
+		slog.Debug("skipping update phase", slog.Int("needs_update_count", 0))
 		return nil
 	}
 
+	slog.Debug("starting update phase", slog.Int("needs_update_count", len(categorized.NeedsUpdate)))
 	color.Cyan("\nUpdating modified tickets...\n")
 	if err := pushCtx.service.UpdateModified(ctx, categorized.NeedsUpdate); err != nil {
+		slog.Debug("failed to update tickets", slog.String("error", err.Error()))
 		return fmt.Errorf("update tickets: %w", err)
 	}
 
 	// Link any new dependencies (Jira API is idempotent for existing links)
+	slog.Debug("linking dependencies for updated tasks")
 	if err := pushCtx.service.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, pushCtx.linkType); err != nil {
+		slog.Debug("failed to link dependencies", slog.String("error", err.Error()))
 		return fmt.Errorf("link dependencies: %w", err)
 	}
 
 	// Transition issues to match local jira-state
+	slog.Debug("transitioning updated issues")
 	transitioned, err := pushCtx.service.TransitionIssues(ctx, categorized.NeedsUpdate)
 	if err != nil {
+		slog.Debug("failed to transition issues", slog.String("error", err.Error()))
 		return fmt.Errorf("transition issues: %w", err)
 	}
 	if transitioned > 0 {
+		slog.Debug("transitioned issues", slog.Int("count", transitioned))
 		color.Cyan("Transitioned %d issue(s)\n", transitioned)
 	}
 
 	taskMap := buildPushTaskMap(tasks)
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, task := range categorized.NeedsUpdate {
+		slog.Debug("saving updated task",
+			slog.String("task", task.TaskID()),
+			slog.String("jira_key", task.Frontmatter.JiraNumber),
+			slog.String("path", task.Path),
+		)
 		task.Frontmatter.LastSynced = now
 		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
+			slog.Debug("failed to save task", slog.String("path", task.Path), slog.String("error", err.Error()))
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
 		color.Green("[OK] Updated %s", task.Frontmatter.JiraNumber)
 		printPushLinkedDependencies(task, taskMap)
 	}
+
+	slog.Debug("update phase completed", slog.Int("updated_count", len(categorized.NeedsUpdate)))
 	return nil
 }
 

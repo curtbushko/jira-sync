@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -75,16 +76,28 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	depsStr, _ := cmd.Flags().GetString("deps")
 	outputDir, _ := cmd.Flags().GetString("output")
 
+	slog.Debug("create command started",
+		slog.String("title", title),
+		slog.String("jira_parent", jiraParent),
+		slog.String("jira_type", jiraType),
+		slog.String("jira_project", jiraProject),
+		slog.String("deps", depsStr),
+		slog.String("output_dir", outputDir),
+	)
+
 	// Validate jira-parent requirement (required for all types except Epic)
 	if !strings.EqualFold(jiraType, "Epic") && jiraParent == "" {
+		slog.Debug("jira-parent required but not provided", slog.String("jira_type", jiraType))
 		return fmt.Errorf("--jira-parent is required for issue type %q (only Epics can omit parent)", jiraType)
 	}
 
 	// Parse dependencies
 	jiraDeps := parseDeps(depsStr)
+	slog.Debug("parsed dependencies", slog.Int("count", len(jiraDeps)), slog.Any("deps", jiraDeps))
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		slog.Debug("failed to create output directory", slog.String("dir", outputDir), slog.String("error", err.Error()))
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
@@ -92,13 +105,16 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	repo := filesystem.NewFileTaskRepository()
 	filename := repo.GenerateFilename()
 	filePath := filepath.Join(outputDir, filename)
+	slog.Debug("generated filename", slog.String("filename", filename), slog.String("path", filePath))
 
 	// Check if file already exists (unlikely but safe)
 	if _, err := os.Stat(filePath); err == nil {
+		slog.Debug("file already exists, generating new filename", slog.String("path", filePath))
 		// Add milliseconds to make unique
 		time.Sleep(time.Millisecond)
 		filename = repo.GenerateFilename()
 		filePath = filepath.Join(outputDir, filename)
+		slog.Debug("new filename generated", slog.String("filename", filename), slog.String("path", filePath))
 	}
 
 	// Create task file struct
@@ -124,9 +140,17 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Write the file
+	slog.Debug("writing task file", slog.String("path", filePath))
 	if err := repo.WriteTask(task); err != nil {
+		slog.Debug("failed to write task file", slog.String("path", filePath), slog.String("error", err.Error()))
 		return fmt.Errorf("write task file: %w", err)
 	}
+
+	slog.Debug("create completed successfully",
+		slog.String("path", filePath),
+		slog.String("title", title),
+		slog.String("jira_type", jiraType),
+	)
 
 	color.Green("✓ Created: %s", filePath)
 	fmt.Printf("  Title: %s\n", title)

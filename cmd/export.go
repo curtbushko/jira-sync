@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -49,20 +50,34 @@ func init() {
 func runExport(cmd *cobra.Command, args []string) error {
 	issueKey := args[0]
 
-	// Validate issue key format
-	if !issueKeyRegex.MatchString(issueKey) {
-		return fmt.Errorf("invalid issue key format: %s (expected PROJECT-NUMBER, e.g., GUARD-123)", issueKey)
-	}
-
 	// Get flags
 	outputDir, _ := cmd.Flags().GetString("output")
 	parentOverride, _ := cmd.Flags().GetString("parent")
 	force, _ := cmd.Flags().GetBool("force")
 
+	slog.Debug("export command started",
+		slog.String("issue_key", issueKey),
+		slog.String("output_dir", outputDir),
+		slog.String("parent_override", parentOverride),
+		slog.Bool("force", force),
+	)
+
+	// Validate issue key format
+	if !issueKeyRegex.MatchString(issueKey) {
+		slog.Debug("invalid issue key format", slog.String("issue_key", issueKey))
+		return fmt.Errorf("invalid issue key format: %s (expected PROJECT-NUMBER, e.g., GUARD-123)", issueKey)
+	}
+
 	// Get Jira credentials from config
 	jiraURL := viper.GetString("jira.url")
 	jiraUser := viper.GetString("jira.user")
 	jiraToken := viper.GetString("token")
+
+	slog.Debug("jira config",
+		slog.String("jira_url", jiraURL),
+		slog.String("jira_user", jiraUser),
+		slog.Bool("has_token", jiraToken != ""),
+	)
 
 	if jiraURL == "" {
 		return errJiraURLRequired
@@ -77,6 +92,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 	// Create Jira client
 	jiraClient, err := jira.NewClient(jiraURL, jiraUser, jiraToken)
 	if err != nil {
+		slog.Debug("failed to create jira client", slog.String("error", err.Error()))
 		return fmt.Errorf("create jira client: %w", err)
 	}
 
@@ -86,36 +102,50 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	// Load existing tasks for dependency mapping (ignore error, may be empty)
 	existingTasks, _ := repo.ListTasks(outputDir)
+	slog.Debug("loaded existing tasks for dependency mapping", slog.Int("count", len(existingTasks)))
 
 	// Create export service
 	svc := export.NewService(jiraClient, hasher, existingTasks)
 
 	// Export the issue
+	slog.Debug("fetching issue from jira", slog.String("issue_key", issueKey))
 	color.Cyan("Fetching %s...\n", issueKey)
 
 	result, err := svc.Export(cmd.Context(), issueKey, export.Options{
 		ParentOverride: parentOverride,
 	})
 	if err != nil {
+		slog.Debug("failed to export issue", slog.String("issue_key", issueKey), slog.String("error", err.Error()))
 		return fmt.Errorf("export %s: %w", issueKey, err)
 	}
+
+	slog.Debug("issue exported successfully",
+		slog.String("issue_key", issueKey),
+		slog.String("title", result.Task.Frontmatter.Title),
+		slog.String("status", result.Task.Frontmatter.JiraState),
+		slog.String("filename", result.Filename),
+	)
 
 	// Generate output path
 	outputPath := filepath.Join(outputDir, result.Filename)
 
 	// Check if file exists
 	if _, err := os.Stat(outputPath); err == nil && !force {
+		slog.Debug("file already exists", slog.String("path", outputPath))
 		return fmt.Errorf("file already exists: %s (use --force to overwrite)", outputPath)
 	}
 
 	// Ensure output directory exists
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		slog.Debug("failed to create output directory", slog.String("dir", outputDir), slog.String("error", err.Error()))
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
 	// Set the path and write
 	result.Task.Path = outputPath
+	slog.Debug("writing task file", slog.String("path", outputPath))
 	if err := repo.WriteTask(result.Task); err != nil {
+		slog.Debug("failed to write task file", slog.String("path", outputPath), slog.String("error", err.Error()))
 		return fmt.Errorf("write task file: %w", err)
 	}
 
@@ -135,6 +165,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  Is Blocked By: %s\n", strings.Join(result.Task.Frontmatter.JiraIsBlockedBy, ", "))
 	}
 
+	slog.Debug("export completed successfully", slog.String("path", outputPath))
 	color.Green("\nExported: %s", outputPath)
 
 	return nil
