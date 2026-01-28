@@ -92,9 +92,9 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 
 	mockJira.GetIssueLinksFunc = func(_ context.Context, _ string) ([]ports.IssueLink, error) {
 		return []ports.IssueLink{
-			// OutwardIssue = issues that block this task (goes to JiraIsBlockedBy)
-			{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"},
-			{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-103"},
+			// InwardIssue = issues that block this task (goes to JiraIsBlockedBy)
+			{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},
+			{Type: "Blocking", InwardIssue: "GUARD-103", OutwardIssue: ""},
 		}, nil
 	}
 

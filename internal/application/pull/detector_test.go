@@ -17,8 +17,8 @@ func TestExtractBlockingRelationships_BothDirections(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},  // We block GUARD-101
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-200"}, // We are blocked by GUARD-200
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},  // We block GUARD-101
+		{Type: "Blocking", InwardIssue: "GUARD-200", OutwardIssue: ""}, // We are blocked by GUARD-200
 	}
 
 	detector := NewDependencyDetector("Blocking")
@@ -39,8 +39,8 @@ func TestExtractBlockingRelationships_OnlyBlocks(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
-		{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"},
 	}
 
 	detector := NewDependencyDetector("Blocking")
@@ -61,8 +61,8 @@ func TestExtractBlockingRelationships_OnlyBlockedBy(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-200"},
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-201"},
+		{Type: "Blocking", InwardIssue: "GUARD-200", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "GUARD-201", OutwardIssue: ""},
 	}
 
 	detector := NewDependencyDetector("Blocking")
@@ -100,10 +100,10 @@ func TestExtractBlockingRelationships_IgnoresOtherLinkTypes(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
-		{Type: "Relates", InwardIssue: "GUARD-102", OutwardIssue: ""},   // Different type - ignored
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-200"},
-		{Type: "Clones", InwardIssue: "", OutwardIssue: "GUARD-201"},   // Different type - ignored
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},
+		{Type: "Relates", InwardIssue: "", OutwardIssue: "GUARD-102"},   // Different type - ignored
+		{Type: "Blocking", InwardIssue: "GUARD-200", OutwardIssue: ""},
+		{Type: "Clones", InwardIssue: "GUARD-201", OutwardIssue: ""},   // Different type - ignored
 	}
 
 	detector := NewDependencyDetector("Blocking")
@@ -124,9 +124,9 @@ func TestExtractBlockingRelationships_CustomLinkType(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "CustomBlocks", InwardIssue: "GUARD-101", OutwardIssue: ""},
-		{Type: "Blocking", InwardIssue: "GUARD-102", OutwardIssue: ""},       // Wrong type
-		{Type: "CustomBlocks", InwardIssue: "", OutwardIssue: "GUARD-200"},
+		{Type: "CustomBlocks", InwardIssue: "", OutwardIssue: "GUARD-101"},
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"},       // Wrong type
+		{Type: "CustomBlocks", InwardIssue: "GUARD-200", OutwardIssue: ""},
 	}
 
 	detector := NewDependencyDetector("CustomBlocks")
@@ -147,7 +147,7 @@ func TestExtractBlockingRelationships_DefaultLinkType(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "GUARD-101", OutwardIssue: ""},
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},
 	}
 
 	// Empty string should use default "Blocking"
