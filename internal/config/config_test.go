@@ -21,7 +21,7 @@ defaults:
   issue_type: Story
   end_date_offset: 14
 link_types:
-  dependency: Blocks
+  dependency: Blocking
 `
 	err := os.WriteFile(configPath, []byte(configContent), 0644)
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ link_types:
 	assert.Equal(t, "TEST", cfg.Defaults.Project)
 	assert.Equal(t, "Story", cfg.Defaults.IssueType)
 	assert.Equal(t, 14, cfg.Defaults.EndDateOffset)
-	assert.Equal(t, "Blocks", cfg.LinkTypes.Dependency)
+	assert.Equal(t, "Blocking", cfg.LinkTypes.Dependency)
 }
 
 func TestConfig_EnvironmentOverrides(t *testing.T) {
@@ -77,7 +77,7 @@ func TestConfig_Defaults(t *testing.T) {
 	// Check defaults are applied
 	assert.Equal(t, "Story", cfg.Defaults.IssueType)
 	assert.Equal(t, 7, cfg.Defaults.EndDateOffset)
-	assert.Equal(t, "Blocks", cfg.LinkTypes.Dependency)
+	assert.Equal(t, "Blocking", cfg.LinkTypes.Dependency)
 }
 
 func TestConfig_MissingToken(t *testing.T) {

@@ -77,13 +77,13 @@ func TestMockJiraClient_UpdateIssue(t *testing.T) {
 func TestMockJiraClient_CreateLink(t *testing.T) {
 	mock := NewMockJiraClient()
 
-	err := mock.CreateLink(context.Background(), "TEST-2", "TEST-1", "Blocks")
+	err := mock.CreateLink(context.Background(), "TEST-2", "TEST-1", "Blocking")
 
 	require.NoError(t, err)
 	assert.Len(t, mock.CreateLinkCalls, 1)
 	assert.Equal(t, "TEST-2", mock.CreateLinkCalls[0].Inward)
 	assert.Equal(t, "TEST-1", mock.CreateLinkCalls[0].Outward)
-	assert.Equal(t, "Blocks", mock.CreateLinkCalls[0].LinkType)
+	assert.Equal(t, "Blocking", mock.CreateLinkCalls[0].LinkType)
 }
 
 func TestMockJiraClient_GetIssue(t *testing.T) {
@@ -110,7 +110,7 @@ func TestMockJiraClient_Reset(t *testing.T) {
 	// Make some calls - errors intentionally ignored as we're testing call tracking
 	_, _ = mock.CreateIssue(context.Background(), ports.CreateIssueRequest{Project: "TEST", Summary: "Test"})
 	_ = mock.UpdateIssue(context.Background(), "TEST-1", ports.UpdateIssueRequest{Summary: "Updated"})
-	_ = mock.CreateLink(context.Background(), "TEST-2", "TEST-1", "Blocks")
+	_ = mock.CreateLink(context.Background(), "TEST-2", "TEST-1", "Blocking")
 	_, _ = mock.GetIssue(context.Background(), "TEST-1")
 
 	assert.Len(t, mock.CreateIssueCalls, 1)
@@ -166,7 +166,7 @@ func TestMockJiraClient_GetIssueWithLinks_CustomBehavior(t *testing.T) {
 			Parent:      "CUSTOM-100",
 			Created:     "2026-01-20T10:00:00.000+0000",
 			Links: []ports.IssueLink{
-				{ID: "link-1", Type: "Blocks", InwardIssue: "CUSTOM-50"},
+				{ID: "link-1", Type: "Blocking", InwardIssue: "CUSTOM-50"},
 			},
 		}, nil
 	}
@@ -178,7 +178,7 @@ func TestMockJiraClient_GetIssueWithLinks_CustomBehavior(t *testing.T) {
 	assert.Equal(t, "CUSTOM", issue.Project)
 	assert.Equal(t, "CUSTOM-100", issue.Parent)
 	assert.Len(t, issue.Links, 1)
-	assert.Equal(t, "Blocks", issue.Links[0].Type)
+	assert.Equal(t, "Blocking", issue.Links[0].Type)
 }
 
 func TestMockJiraClient_GetIssueWithLinks_StoredIssue(t *testing.T) {

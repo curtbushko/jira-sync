@@ -63,7 +63,7 @@ func runDebug(_ *cobra.Command, args []string) error {
 	// Also show what the config says
 	linkType := viper.GetString("link_types.dependency")
 	if linkType == "" {
-		linkType = "Blocks"
+		linkType = "Blocking"
 	}
 	color.Cyan("Configured link_types.dependency: %q\n", linkType)
 

@@ -113,7 +113,7 @@ func buildConfig(viperInstance *viper.Viper) (*Config, error) {
 		cfg.Defaults.EndDateOffset = 7
 	}
 	if cfg.LinkTypes.Dependency == "" {
-		cfg.LinkTypes.Dependency = "Blocks"
+		cfg.LinkTypes.Dependency = "Blocking"
 	}
 
 	// Validate required fields

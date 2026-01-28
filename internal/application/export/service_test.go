@@ -136,8 +136,8 @@ func TestExport_ExtractDependencies_BlocksLinks(t *testing.T) {
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
 			// InwardIssue = issues this task blocks
-			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},
-			{ID: "link-2", Type: "Blocks", InwardIssue: "TEST-2"},
+			{ID: "link-1", Type: "Blocking", InwardIssue: "TEST-1"},
+			{ID: "link-2", Type: "Blocking", InwardIssue: "TEST-2"},
 		},
 	})
 
@@ -160,10 +160,10 @@ func TestExport_IgnoresOtherLinkTypes(t *testing.T) {
 		Summary: "Test with Mixed Links",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
-			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},   // Goes to JiraBlocks
+			{ID: "link-1", Type: "Blocking", InwardIssue: "TEST-1"},   // Goes to JiraBlocks
 			{ID: "link-2", Type: "Relates", InwardIssue: "TEST-2"},  // Ignored (not Blocks type)
 			{ID: "link-3", Type: "Clones", InwardIssue: "TEST-4"},   // Ignored (not Blocks type)
-			{ID: "link-4", Type: "Blocks", OutwardIssue: "TEST-5"},  // Goes to JiraIsBlockedBy
+			{ID: "link-4", Type: "Blocking", OutwardIssue: "TEST-5"},  // Goes to JiraIsBlockedBy
 		},
 	})
 
@@ -189,7 +189,7 @@ func TestExport_MapToWikiLink_FoundLocally(t *testing.T) {
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
 			// InwardIssue = issues this task blocks
-			{ID: "link-1", Type: "Blocks", InwardIssue: "TEST-1"},
+			{ID: "link-1", Type: "Blocking", InwardIssue: "TEST-1"},
 		},
 	})
 
@@ -223,7 +223,7 @@ func TestExport_MapToWikiLink_NotFoundLocally(t *testing.T) {
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
 			// InwardIssue = issues this task blocks
-			{ID: "link-1", Type: "Blocks", InwardIssue: "EXTERNAL-99"},
+			{ID: "link-1", Type: "Blocking", InwardIssue: "EXTERNAL-99"},
 		},
 	})
 

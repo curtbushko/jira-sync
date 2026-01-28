@@ -115,7 +115,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 	}
 
 	// Step 4: Link dependencies
-	err = svc.LinkDependencies(ctx, categorized.Pending, nil, "Blocks")
+	err = svc.LinkDependencies(ctx, categorized.Pending, nil, "Blocking")
 	require.NoError(t, err)
 
 	// Verify links were created (KB-2 -> KB-1, ERR-1 -> KB-1, CTRL-1 -> KB-2, CTRL-1 -> ERR-1)
@@ -233,7 +233,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 
 	// Link dependencies
 	ctx := context.Background()
-	err := svc.LinkDependencies(ctx, tasks, nil, "Blocks")
+	err := svc.LinkDependencies(ctx, tasks, nil, "Blocking")
 	require.NoError(t, err)
 
 	// Verify 4 links: KB-2->KB-1, KB-3->KB-1, KB-4->KB-2, KB-4->KB-3
@@ -391,7 +391,7 @@ func TestE2E_AddDependencyToLinkedTask(t *testing.T) {
 	require.NoError(t, err)
 
 	// Link dependencies for the updated task
-	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocks")
+	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocking")
 	require.NoError(t, err)
 
 	// Verify the link was created: GUARD-102 is blocked by GUARD-101
@@ -450,7 +450,7 @@ func TestE2E_AddExternalDependency(t *testing.T) {
 	err = svc.UpdateModified(ctx, categorized.NeedsUpdate)
 	require.NoError(t, err)
 
-	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocks")
+	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocking")
 	require.NoError(t, err)
 
 	// Verify the link was created to the external issue

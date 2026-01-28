@@ -204,7 +204,7 @@ func TestPushService_LinkDependencies(t *testing.T) {
 			}
 
 			svc := NewService(nil, mockJira, nil)
-			err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
+			err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocking")
 
 			require.NoError(t, err)
 
@@ -212,7 +212,7 @@ func TestPushService_LinkDependencies(t *testing.T) {
 			assert.Len(t, mockJira.CreateLinkCalls, 1)
 			assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
 			assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
-			assert.Equal(t, "Blocks", mockJira.CreateLinkCalls[0].LinkType)
+			assert.Equal(t, "Blocking", mockJira.CreateLinkCalls[0].LinkType)
 
 			// Verify tasks updated to linked
 			assert.Equal(t, domain.SyncStatusLinked, tasks[0].Frontmatter.SyncStatus)
@@ -255,7 +255,7 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocking")
 
 	require.NoError(t, err)
 
@@ -279,7 +279,7 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocking")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid-dep")
@@ -302,7 +302,7 @@ func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocking")
 
 	require.NoError(t, err)
 	assert.Len(t, mockJira.CreateLinkCalls, 1)

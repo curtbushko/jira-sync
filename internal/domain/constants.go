@@ -8,7 +8,7 @@ const (
 )
 
 // DefaultLinkType is the default Jira link type for dependencies.
-const DefaultLinkType = "Blocks"
+const DefaultLinkType = "Blocking"
 
 // DefaultIssueType is the default Jira issue type.
 const DefaultIssueType = "Story"
