@@ -284,7 +284,7 @@ func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushCon
 	}
 
 	color.Cyan("\nLinking dependencies...\n")
-	if err := pushCtx.service.LinkDependencies(ctx, categorized.Created, pushCtx.linkType); err != nil {
+	if err := pushCtx.service.LinkDependencies(ctx, categorized.Created, tasks, pushCtx.linkType); err != nil {
 		return fmt.Errorf("link dependencies: %w", err)
 	}
 

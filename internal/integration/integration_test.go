@@ -114,7 +114,7 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 	}
 
 	// Step 4: Link dependencies
-	err = svc.LinkDependencies(ctx, categorized.Pending, "Blocks")
+	err = svc.LinkDependencies(ctx, categorized.Pending, nil, "Blocks")
 	require.NoError(t, err)
 
 	// Verify links were created (KB-2 -> KB-1, ERR-1 -> KB-1, CTRL-1 -> KB-2, CTRL-1 -> ERR-1)
@@ -232,7 +232,7 @@ func TestE2E_DependencyResolution(t *testing.T) {
 
 	// Link dependencies
 	ctx := context.Background()
-	err := svc.LinkDependencies(ctx, tasks, "Blocks")
+	err := svc.LinkDependencies(ctx, tasks, nil, "Blocks")
 	require.NoError(t, err)
 
 	// Verify 4 links: KB-2->KB-1, KB-3->KB-1, KB-4->KB-2, KB-4->KB-3

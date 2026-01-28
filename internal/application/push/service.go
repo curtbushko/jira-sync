@@ -137,9 +137,16 @@ func (s *Service) CreateTickets(ctx context.Context, tasks []*domain.TaskFile, d
 // Creates links based on:
 //   - jira-blocks: issues this task blocks (we are the blocker)
 //   - jira-is-blocked-by: issues that block this task (we are blocked)
-func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile, linkType string) error {
-	// Build task ID to Jira key map
-	idMap := s.BuildTaskIDMap(tasks)
+//
+// Parameters:
+//   - tasks: tasks to process for linking (typically created tasks)
+//   - allTasks: all tasks for resolving local task IDs to Jira keys (pass nil to use tasks)
+func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile, allTasks []*domain.TaskFile, linkType string) error {
+	// Build task ID to Jira key map from all tasks
+	if allTasks == nil {
+		allTasks = tasks
+	}
+	idMap := s.BuildTaskIDMap(allTasks)
 
 	// Create links for each task
 	for _, task := range tasks {

@@ -204,7 +204,7 @@ func TestPushService_LinkDependencies(t *testing.T) {
 			}
 
 			svc := NewService(nil, mockJira, nil)
-			err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+			err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
 
 			require.NoError(t, err)
 
@@ -255,7 +255,7 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
 
 	require.NoError(t, err)
 
@@ -279,7 +279,7 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
 
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid-dep")
@@ -302,7 +302,7 @@ func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
 	}
 
 	svc := NewService(nil, mockJira, nil)
-	err := svc.LinkDependencies(context.Background(), tasks, "Blocks")
+	err := svc.LinkDependencies(context.Background(), tasks, nil, "Blocks")
 
 	require.NoError(t, err)
 	assert.Len(t, mockJira.CreateLinkCalls, 1)
