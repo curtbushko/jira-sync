@@ -63,6 +63,7 @@ type CreateIssueRequest struct {
 type UpdateIssueRequest struct {
 	Summary     string
 	Description string
+	Parent      string // New parent issue key (empty to skip update)
 }
 
 // Transition represents a Jira workflow transition.

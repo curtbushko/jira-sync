@@ -249,7 +249,7 @@ func executePushPhases(ctx context.Context, flags pushFlags, pushCtx *pushContex
 		return err
 	}
 
-	if err := executePushUpdatePhase(ctx, pushCtx, categorized); err != nil {
+	if err := executePushUpdatePhase(ctx, pushCtx, categorized, tasks); err != nil {
 		return err
 	}
 
@@ -329,7 +329,7 @@ func printPushLinkedDependencies(task *domain.TaskFile, taskMap map[string]*doma
 	}
 }
 
-func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *push.CategorizedTasks) error {
+func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categorized *push.CategorizedTasks, tasks []*domain.TaskFile) error {
 	if len(categorized.NeedsUpdate) == 0 {
 		return nil
 	}
@@ -339,13 +339,30 @@ func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categoriz
 		return fmt.Errorf("update tickets: %w", err)
 	}
 
+	// Link any new dependencies (Jira API is idempotent for existing links)
+	if err := pushCtx.service.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, pushCtx.linkType); err != nil {
+		return fmt.Errorf("link dependencies: %w", err)
+	}
+
+	// Transition issues to match local jira-state
+	transitioned, err := pushCtx.service.TransitionIssues(ctx, categorized.NeedsUpdate)
+	if err != nil {
+		return fmt.Errorf("transition issues: %w", err)
+	}
+	if transitioned > 0 {
+		color.Cyan("Transitioned %d issue(s)\n", transitioned)
+	}
+
+	taskMap := buildPushTaskMap(tasks)
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, task := range categorized.NeedsUpdate {
 		task.Frontmatter.LastSynced = now
+		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
 		}
 		color.Green("[OK] Updated %s", task.Frontmatter.JiraNumber)
+		printPushLinkedDependencies(task, taskMap)
 	}
 	return nil
 }

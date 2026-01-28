@@ -542,3 +542,151 @@ func TestPushService_CreateTickets_NoTruncationNeeded(t *testing.T) {
 	assert.Equal(t, "KB-1: Normal Task", mockJira.CreateIssueCalls[0].Summary)
 	assert.Equal(t, "Normal description", mockJira.CreateIssueCalls[0].Description)
 }
+
+func TestTransitionIssues_TransitionsToTargetState(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Mock GetIssue to return current state
+	mockJira.GetIssueFunc = func(_ context.Context, key string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:    key,
+			Status: "To Do", // Current state
+		}, nil
+	}
+
+	// Mock GetTransitions to return available transitions
+	mockJira.GetTransitionsFunc = func(_ context.Context, _ string) ([]ports.Transition, error) {
+		return []ports.Transition{
+			{ID: "11", Name: "To Do"},
+			{ID: "21", Name: "In Progress"},
+			{ID: "31", Name: "Done"},
+		}, nil
+	}
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraNumber: "GUARD-101",
+			JiraState:  "In Progress", // Target state
+		},
+	}
+
+	svc := NewService(nil, mockJira, hasher)
+	transitioned, err := svc.TransitionIssues(context.Background(), []*domain.TaskFile{task})
+
+	require.NoError(t, err)
+	assert.Equal(t, 1, transitioned)
+	assert.Len(t, mockJira.DoTransitionCalls, 1)
+	assert.Equal(t, "GUARD-101", mockJira.DoTransitionCalls[0].Key)
+	assert.Equal(t, "21", mockJira.DoTransitionCalls[0].TransitionID)
+}
+
+func TestTransitionIssues_SkipsWhenAlreadyInTargetState(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	// Mock GetIssue to return same state as target
+	mockJira.GetIssueFunc = func(_ context.Context, key string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:    key,
+			Status: "Done",
+		}, nil
+	}
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraNumber: "GUARD-101",
+			JiraState:  "Done", // Already in this state
+		},
+	}
+
+	svc := NewService(nil, mockJira, hasher)
+	transitioned, err := svc.TransitionIssues(context.Background(), []*domain.TaskFile{task})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, transitioned)
+	assert.Len(t, mockJira.DoTransitionCalls, 0)
+}
+
+func TestTransitionIssues_SkipsTasksWithoutJiraState(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraNumber: "GUARD-101",
+			JiraState:  "", // No target state
+		},
+	}
+
+	svc := NewService(nil, mockJira, hasher)
+	transitioned, err := svc.TransitionIssues(context.Background(), []*domain.TaskFile{task})
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, transitioned)
+	assert.Len(t, mockJira.GetIssueCalls, 0) // Should not even fetch issue
+}
+
+func TestTransitionIssues_ReturnsErrorForUnavailableTransition(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	mockJira.GetIssueFunc = func(_ context.Context, key string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:    key,
+			Status: "To Do",
+		}, nil
+	}
+
+	// Only "In Progress" is available, not "Done"
+	mockJira.GetTransitionsFunc = func(_ context.Context, _ string) ([]ports.Transition, error) {
+		return []ports.Transition{
+			{ID: "21", Name: "In Progress"},
+		}, nil
+	}
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraNumber: "GUARD-101",
+			JiraState:  "Done", // Not available
+		},
+	}
+
+	svc := NewService(nil, mockJira, hasher)
+	_, err := svc.TransitionIssues(context.Background(), []*domain.TaskFile{task})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, domain.ErrTransitionNotAvailable)
+	assert.Contains(t, err.Error(), "Done")
+	assert.Contains(t, err.Error(), "In Progress") // Available transition listed
+}
+
+func TestUpdateModified_IncludesParent(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Test Task",
+			JiraNumber: "GUARD-101",
+			JiraParent: "GUARD-200", // New parent
+		},
+		Description: "Test description",
+	}
+
+	svc := NewService(nil, mockJira, hasher)
+	err := svc.UpdateModified(context.Background(), []*domain.TaskFile{task})
+
+	require.NoError(t, err)
+	assert.Len(t, mockJira.UpdateIssueCalls, 1)
+	assert.Equal(t, "GUARD-200", mockJira.UpdateIssueCalls[0].Req.Parent)
+}

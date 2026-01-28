@@ -94,12 +94,19 @@ func (c *Client) CreateIssue(ctx context.Context, req ports.CreateIssueRequest) 
 
 // UpdateIssue updates an existing issue.
 func (c *Client) UpdateIssue(ctx context.Context, key string, req ports.UpdateIssueRequest) error {
+	fields := &jira.IssueFields{
+		Summary:     req.Summary,
+		Description: req.Description,
+	}
+
+	// Set parent if provided
+	if req.Parent != "" {
+		fields.Parent = &jira.Parent{Key: req.Parent}
+	}
+
 	issue := &jira.Issue{
-		Key: key,
-		Fields: &jira.IssueFields{
-			Summary:     req.Summary,
-			Description: req.Description,
-		},
+		Key:    key,
+		Fields: fields,
 	}
 
 	_, resp, err := c.client.Issue.UpdateWithContext(ctx, issue)

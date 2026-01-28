@@ -12,6 +12,7 @@ import (
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/application/push"
 	"github.com/curtbushko/jira-sync/internal/domain"
+	"github.com/curtbushko/jira-sync/internal/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -310,6 +311,272 @@ func TestE2E_EmptyDirectory(t *testing.T) {
 	assert.Len(t, categorized.Created, 0)
 	assert.Len(t, categorized.Linked, 0)
 	assert.Len(t, categorized.NeedsUpdate, 0)
+}
+
+// TestE2E_AddDependencyToLinkedTask tests adding a new dependency to an already-linked task.
+// This ensures that new dependencies are linked during the update phase.
+func TestE2E_AddDependencyToLinkedTask(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	repo := filesystem.NewFileTaskRepository()
+	mockJira := jira.NewMockJiraClient()
+	mockJira.SetBaseURL("https://test.atlassian.net")
+	hasher := hashing.NewSHA256HashComputer()
+	svc := push.NewService(repo, mockJira, hasher)
+
+	// Create two tasks that are already linked (simulating previous sync)
+	task1 := &domain.TaskFile{
+		Path: filepath.Join(tmpDir, "task1.md"),
+		Frontmatter: domain.Frontmatter{
+			Title:           "KB-1: First Task",
+			JiraNumber:      "GUARD-101",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-101",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraState:       domain.DefaultJiraState,
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
+		},
+		Description: "First task description.",
+	}
+	task1.Frontmatter.ContentHash = hasher.ComputeHash(task1)
+
+	task2 := &domain.TaskFile{
+		Path: filepath.Join(tmpDir, "task2.md"),
+		Frontmatter: domain.Frontmatter{
+			Title:           "KB-2: Second Task",
+			JiraNumber:      "GUARD-102",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-102",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraState:       domain.DefaultJiraState,
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
+		},
+		Description: "Second task description.",
+	}
+	task2.Frontmatter.ContentHash = hasher.ComputeHash(task2)
+
+	// Write both tasks
+	require.NoError(t, repo.WriteTask(task1))
+	require.NoError(t, repo.WriteTask(task2))
+
+	// Reload and verify both are in Linked state
+	tasks, err := repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized := svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.Linked, 2)
+	assert.Len(t, categorized.NeedsUpdate, 0)
+
+	// Now add a dependency: KB-2 is blocked by KB-1
+	for _, task := range tasks {
+		if task.TaskID() == "KB-2" {
+			task.Frontmatter.JiraIsBlockedBy = []string{"KB-1"}
+			require.NoError(t, repo.WriteTask(task))
+			break
+		}
+	}
+
+	// Reload and verify KB-2 is now in NeedsUpdate
+	tasks, err = repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized = svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.Linked, 1)
+	assert.Len(t, categorized.NeedsUpdate, 1)
+	assert.Equal(t, "KB-2", categorized.NeedsUpdate[0].TaskID())
+
+	// Update the modified task and link dependencies
+	ctx := context.Background()
+	err = svc.UpdateModified(ctx, categorized.NeedsUpdate)
+	require.NoError(t, err)
+
+	// Link dependencies for the updated task
+	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocks")
+	require.NoError(t, err)
+
+	// Verify the link was created: GUARD-102 is blocked by GUARD-101
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	link := mockJira.CreateLinkCalls[0]
+	assert.Equal(t, "GUARD-102", link.Inward)  // blocked issue
+	assert.Equal(t, "GUARD-101", link.Outward) // blocker issue
+}
+
+// TestE2E_AddExternalDependency tests adding a dependency to an external Jira issue.
+func TestE2E_AddExternalDependency(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	repo := filesystem.NewFileTaskRepository()
+	mockJira := jira.NewMockJiraClient()
+	mockJira.SetBaseURL("https://test.atlassian.net")
+	hasher := hashing.NewSHA256HashComputer()
+	svc := push.NewService(repo, mockJira, hasher)
+
+	// Create a linked task
+	task := &domain.TaskFile{
+		Path: filepath.Join(tmpDir, "task.md"),
+		Frontmatter: domain.Frontmatter{
+			Title:           "KB-1: My Task",
+			JiraNumber:      "GUARD-101",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-101",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraState:       domain.DefaultJiraState,
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
+		},
+		Description: "Task description.",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+	require.NoError(t, repo.WriteTask(task))
+
+	// Verify it's in Linked state
+	tasks, err := repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized := svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.Linked, 1)
+
+	// Add a dependency to an external Jira issue (not a local task)
+	tasks[0].Frontmatter.JiraIsBlockedBy = []string{"EXTERNAL-999"}
+	require.NoError(t, repo.WriteTask(tasks[0]))
+
+	// Reload and verify it's in NeedsUpdate
+	tasks, err = repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized = svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.NeedsUpdate, 1)
+
+	// Update and link
+	ctx := context.Background()
+	err = svc.UpdateModified(ctx, categorized.NeedsUpdate)
+	require.NoError(t, err)
+
+	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocks")
+	require.NoError(t, err)
+
+	// Verify the link was created to the external issue
+	assert.Len(t, mockJira.CreateLinkCalls, 1)
+	link := mockJira.CreateLinkCalls[0]
+	assert.Equal(t, "GUARD-101", link.Inward)    // blocked issue (our task)
+	assert.Equal(t, "EXTERNAL-999", link.Outward) // blocker issue (external)
+}
+
+// TestE2E_ChangeJiraState tests transitioning a task to a new state.
+func TestE2E_ChangeJiraState(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	repo := filesystem.NewFileTaskRepository()
+	mockJira := jira.NewMockJiraClient()
+	mockJira.SetBaseURL("https://test.atlassian.net")
+	hasher := hashing.NewSHA256HashComputer()
+	svc := push.NewService(repo, mockJira, hasher)
+
+	// Mock GetIssue to return current state as "To Do"
+	mockJira.GetIssueFunc = func(_ context.Context, key string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:    key,
+			Status: "To Do",
+		}, nil
+	}
+
+	// Create a linked task with state "To Do"
+	task := &domain.TaskFile{
+		Path: filepath.Join(tmpDir, "task.md"),
+		Frontmatter: domain.Frontmatter{
+			Title:           "KB-1: My Task",
+			JiraNumber:      "GUARD-101",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-101",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraState:       "To Do",
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
+		},
+		Description: "Task description.",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+	require.NoError(t, repo.WriteTask(task))
+
+	// Verify it's in Linked state (no changes needed)
+	tasks, err := repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized := svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.Linked, 1)
+	assert.Len(t, categorized.NeedsUpdate, 0)
+
+	// Change state to "In Progress"
+	tasks[0].Frontmatter.JiraState = "In Progress"
+	require.NoError(t, repo.WriteTask(tasks[0]))
+
+	// Reload and verify it's in NeedsUpdate
+	tasks, err = repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized = svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.NeedsUpdate, 1)
+
+	// Transition the task
+	ctx := context.Background()
+	transitioned, err := svc.TransitionIssues(ctx, categorized.NeedsUpdate)
+	require.NoError(t, err)
+	assert.Equal(t, 1, transitioned)
+
+	// Verify DoTransition was called
+	assert.Len(t, mockJira.DoTransitionCalls, 1)
+	assert.Equal(t, "GUARD-101", mockJira.DoTransitionCalls[0].Key)
+	assert.Equal(t, "21", mockJira.DoTransitionCalls[0].TransitionID) // "In Progress" ID
+}
+
+// TestE2E_UpdateParent tests updating a task's parent.
+func TestE2E_UpdateParent(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	repo := filesystem.NewFileTaskRepository()
+	mockJira := jira.NewMockJiraClient()
+	mockJira.SetBaseURL("https://test.atlassian.net")
+	hasher := hashing.NewSHA256HashComputer()
+	svc := push.NewService(repo, mockJira, hasher)
+
+	// Create a linked task with parent GUARD-100
+	task := &domain.TaskFile{
+		Path: filepath.Join(tmpDir, "task.md"),
+		Frontmatter: domain.Frontmatter{
+			Title:           "KB-1: My Task",
+			JiraNumber:      "GUARD-101",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-101",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraState:       domain.DefaultJiraState,
+			JiraParent:      "GUARD-100",
+			JiraBlocks:      []string{},
+			JiraIsBlockedBy: []string{},
+		},
+		Description: "Task description.",
+	}
+	task.Frontmatter.ContentHash = hasher.ComputeHash(task)
+	require.NoError(t, repo.WriteTask(task))
+
+	// Verify it's in Linked state
+	tasks, err := repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized := svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.Linked, 1)
+
+	// Change parent to GUARD-200
+	tasks[0].Frontmatter.JiraParent = "GUARD-200"
+	require.NoError(t, repo.WriteTask(tasks[0]))
+
+	// Reload and verify it's in NeedsUpdate
+	tasks, err = repo.ListTasks(tmpDir)
+	require.NoError(t, err)
+	categorized = svc.CategorizeTasks(tasks)
+	assert.Len(t, categorized.NeedsUpdate, 1)
+
+	// Update the task
+	ctx := context.Background()
+	err = svc.UpdateModified(ctx, categorized.NeedsUpdate)
+	require.NoError(t, err)
+
+	// Verify UpdateIssue was called with new parent
+	assert.Len(t, mockJira.UpdateIssueCalls, 1)
+	assert.Equal(t, "GUARD-200", mockJira.UpdateIssueCalls[0].Req.Parent)
 }
 
 // TestJiraIntegration_Real is an integration test that requires real Jira credentials.

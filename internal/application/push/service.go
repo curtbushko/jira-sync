@@ -263,6 +263,7 @@ func isJiraKey(issueKey string) bool {
 
 // UpdateModified updates Jira tickets for tasks with content changes.
 // Fields are validated and truncated if they exceed Jira limits.
+// Updates summary, description, and parent.
 func (s *Service) UpdateModified(ctx context.Context, tasks []*domain.TaskFile) error {
 	for _, task := range tasks {
 		// Validate and truncate fields before sending to Jira
@@ -271,6 +272,7 @@ func (s *Service) UpdateModified(ctx context.Context, tasks []*domain.TaskFile) 
 		err := s.jira.UpdateIssue(ctx, task.Frontmatter.JiraNumber, ports.UpdateIssueRequest{
 			Summary:     summary,
 			Description: description,
+			Parent:      task.Frontmatter.JiraParent,
 		})
 		if err != nil {
 			return fmt.Errorf("update ticket %s: %w", task.Frontmatter.JiraNumber, err)
@@ -283,6 +285,70 @@ func (s *Service) UpdateModified(ctx context.Context, tasks []*domain.TaskFile) 
 	}
 
 	return nil
+}
+
+// TransitionIssues transitions Jira issues to match local jira-state.
+// Skips tasks without jira-state set.
+// Returns the number of issues transitioned.
+func (s *Service) TransitionIssues(ctx context.Context, tasks []*domain.TaskFile) (int, error) {
+	transitioned := 0
+
+	for _, task := range tasks {
+		targetState := task.Frontmatter.JiraState
+		if targetState == "" {
+			continue
+		}
+
+		issueKey := task.Frontmatter.JiraNumber
+		if issueKey == "" {
+			continue
+		}
+
+		// Get current issue state from Jira
+		issue, err := s.jira.GetIssue(ctx, issueKey)
+		if err != nil {
+			return transitioned, fmt.Errorf("get issue %s: %w", issueKey, err)
+		}
+
+		// Skip if already in target state (case-insensitive)
+		if strings.EqualFold(issue.Status, targetState) {
+			continue
+		}
+
+		// Get available transitions
+		transitions, err := s.jira.GetTransitions(ctx, issueKey)
+		if err != nil {
+			return transitioned, fmt.Errorf("get transitions for %s: %w", issueKey, err)
+		}
+
+		// Find the transition with matching name (case-insensitive)
+		var transitionID string
+		var availableNames []string
+		for _, t := range transitions {
+			availableNames = append(availableNames, t.Name)
+			if strings.EqualFold(t.Name, targetState) {
+				transitionID = t.ID
+				break
+			}
+		}
+
+		if transitionID == "" {
+			return transitioned, fmt.Errorf("%w: '%s' for %s (available: %s)",
+				domain.ErrTransitionNotAvailable,
+				targetState,
+				issueKey,
+				strings.Join(availableNames, ", "))
+		}
+
+		// Perform the transition
+		if err := s.jira.DoTransition(ctx, issueKey, transitionID); err != nil {
+			return transitioned, fmt.Errorf("transition %s to %s: %w", issueKey, targetState, err)
+		}
+
+		transitioned++
+	}
+
+	return transitioned, nil
 }
 
 // validateTaskFields validates and returns truncated summary and description.
