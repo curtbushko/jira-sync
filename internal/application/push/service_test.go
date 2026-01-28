@@ -208,10 +208,10 @@ func TestPushService_LinkDependencies(t *testing.T) {
 
 			require.NoError(t, err)
 
-			// Verify link was created: GUARD-102 blocked by GUARD-101
+			// Verify link was created: GUARD-101 blocks GUARD-102
 			assert.Len(t, mockJira.CreateLinkCalls, 1)
-			assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Inward)
-			assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
+			assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
+			assert.Equal(t, "GUARD-102", mockJira.CreateLinkCalls[0].Outward)
 			assert.Equal(t, "Blocking", mockJira.CreateLinkCalls[0].LinkType)
 
 			// Verify tasks updated to linked
@@ -306,9 +306,9 @@ func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, mockJira.CreateLinkCalls, 1)
-	// Verify the link was created with the external Jira key
-	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Inward)
-	assert.Equal(t, "GUARD-999", mockJira.CreateLinkCalls[0].Outward)
+	// Verify the link was created: GUARD-999 blocks GUARD-101
+	assert.Equal(t, "GUARD-999", mockJira.CreateLinkCalls[0].Inward)
+	assert.Equal(t, "GUARD-101", mockJira.CreateLinkCalls[0].Outward)
 }
 
 func TestPushService_UpdateModified(t *testing.T) {

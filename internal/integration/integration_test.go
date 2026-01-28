@@ -394,11 +394,11 @@ func TestE2E_AddDependencyToLinkedTask(t *testing.T) {
 	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocking")
 	require.NoError(t, err)
 
-	// Verify the link was created: GUARD-102 is blocked by GUARD-101
+	// Verify the link was created: GUARD-101 blocks GUARD-102
 	assert.Len(t, mockJira.CreateLinkCalls, 1)
 	link := mockJira.CreateLinkCalls[0]
-	assert.Equal(t, "GUARD-102", link.Inward)  // blocked issue
-	assert.Equal(t, "GUARD-101", link.Outward) // blocker issue
+	assert.Equal(t, "GUARD-101", link.Inward)  // blocker issue
+	assert.Equal(t, "GUARD-102", link.Outward) // blocked issue
 }
 
 // TestE2E_AddExternalDependency tests adding a dependency to an external Jira issue.
@@ -453,11 +453,11 @@ func TestE2E_AddExternalDependency(t *testing.T) {
 	err = svc.LinkDependencies(ctx, categorized.NeedsUpdate, tasks, "Blocking")
 	require.NoError(t, err)
 
-	// Verify the link was created to the external issue
+	// Verify the link was created: EXTERNAL-999 blocks GUARD-101
 	assert.Len(t, mockJira.CreateLinkCalls, 1)
 	link := mockJira.CreateLinkCalls[0]
-	assert.Equal(t, "GUARD-101", link.Inward)    // blocked issue (our task)
-	assert.Equal(t, "EXTERNAL-999", link.Outward) // blocker issue (external)
+	assert.Equal(t, "EXTERNAL-999", link.Inward) // blocker issue (external)
+	assert.Equal(t, "GUARD-101", link.Outward)   // blocked issue (our task)
 }
 
 // TestE2E_ChangeJiraState tests transitioning a task to a new state.

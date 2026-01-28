@@ -122,7 +122,7 @@ func (c *Client) UpdateIssue(ctx context.Context, key string, req ports.UpdateIs
 }
 
 // CreateLink creates a dependency link between two issues.
-// inward is the blocked issue, outward is the blocker.
+// For "Blocking" link type: inward "Blocks" outward (inward is the blocker).
 func (c *Client) CreateLink(ctx context.Context, inward, outward, linkType string) error {
 	link := &jira.IssueLink{
 		Type: jira.IssueLinkType{

@@ -154,30 +154,30 @@ func (s *Service) LinkDependencies(ctx context.Context, tasks []*domain.TaskFile
 		hasLinks := false
 
 		// Process jira-blocks: this task blocks other issues
-		// CreateLink(inward=blocked, outward=blocker) -> this task is blocker
+		// CreateLink(inward, outward) -> inward shows "Blocks outward"
 		for _, blockedID := range task.Frontmatter.JiraBlocks {
 			blockedIssue, err := s.resolveJiraKey(blockedID, idMap)
 			if err != nil {
 				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, blockedID, task.Frontmatter.Title)
 			}
 
-			// Create link: blockedIssue is blocked by thisIssue
-			if err := s.jira.CreateLink(ctx, blockedIssue, thisIssue, linkType); err != nil {
+			// Create link: thisIssue blocks blockedIssue
+			if err := s.jira.CreateLink(ctx, thisIssue, blockedIssue, linkType); err != nil {
 				return fmt.Errorf("link %s blocks %s: %w", thisIssue, blockedIssue, err)
 			}
 			hasLinks = true
 		}
 
 		// Process jira-is-blocked-by: this task is blocked by other issues
-		// CreateLink(inward=blocked, outward=blocker) -> this task is blocked
+		// CreateLink(inward, outward) -> inward shows "Blocks outward"
 		for _, blockerID := range task.Frontmatter.JiraIsBlockedBy {
 			blockerIssue, err := s.resolveJiraKey(blockerID, idMap)
 			if err != nil {
 				return fmt.Errorf("%w: %s not found for %s", domain.ErrDependencyNotFound, blockerID, task.Frontmatter.Title)
 			}
 
-			// Create link: thisIssue is blocked by blockerIssue
-			if err := s.jira.CreateLink(ctx, thisIssue, blockerIssue, linkType); err != nil {
+			// Create link: blockerIssue blocks thisIssue
+			if err := s.jira.CreateLink(ctx, blockerIssue, thisIssue, linkType); err != nil {
 				return fmt.Errorf("link %s is blocked by %s: %w", thisIssue, blockerIssue, err)
 			}
 			hasLinks = true
