@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"log/slog"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
 )
@@ -50,5 +51,14 @@ func (h *SHA256HashComputer) ComputeHash(task *domain.TaskFile) string {
 
 	// Compute hash
 	hash := sha256.Sum256(buf.Bytes())
-	return hex.EncodeToString(hash[:])
+	result := hex.EncodeToString(hash[:])
+
+	slog.Debug("computed content hash",
+		slog.String("task", task.TaskID()),
+		slog.String("hash", result),
+		slog.Int("buf_len", buf.Len()),
+		slog.Int("desc_len", len(task.Description)),
+	)
+
+	return result
 }

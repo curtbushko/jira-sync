@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"strings"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
@@ -76,13 +77,30 @@ func (s *Service) CategorizeTasks(tasks []*domain.TaskFile) *CategorizedTasks {
 // needsResync checks if a task's content has changed since last sync.
 func (s *Service) needsResync(task *domain.TaskFile) bool {
 	if task.Frontmatter.ContentHash == "" {
+		slog.Debug("task needs resync: no content hash",
+			slog.String("task", task.TaskID()),
+		)
 		return true // Never synced
 	}
 	if s.hasher == nil {
 		return false
 	}
 	currentHash := s.hasher.ComputeHash(task)
-	return currentHash != task.Frontmatter.ContentHash
+	needsUpdate := currentHash != task.Frontmatter.ContentHash
+	if needsUpdate {
+		slog.Debug("task needs resync: hash mismatch",
+			slog.String("task", task.TaskID()),
+			slog.String("stored_hash", task.Frontmatter.ContentHash),
+			slog.String("current_hash", currentHash),
+			slog.String("title", task.Frontmatter.Title),
+			slog.String("jira_parent", task.Frontmatter.JiraParent),
+			slog.String("jira_state", task.Frontmatter.JiraState),
+			slog.Any("jira_blocks", task.Frontmatter.JiraBlocks),
+			slog.Any("jira_is_blocked_by", task.Frontmatter.JiraIsBlockedBy),
+			slog.Int("description_len", len(task.Description)),
+		)
+	}
+	return needsUpdate
 }
 
 // CreateTickets creates Jira tickets for pending tasks.
