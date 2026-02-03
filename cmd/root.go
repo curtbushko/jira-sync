@@ -94,7 +94,6 @@ func initConfig() {
 	_ = viper.BindEnv("jira.user", "JIRA_USER")
 	_ = viper.BindEnv("defaults.project", "JIRA_DEFAULTS_PROJECT")
 	_ = viper.BindEnv("defaults.issue_type", "JIRA_DEFAULTS_ISSUE_TYPE")
-	_ = viper.BindEnv("defaults.end_date_offset", "JIRA_DEFAULTS_END_DATE_OFFSET")
 	_ = viper.BindEnv("link_types.dependency", "JIRA_LINK_TYPES_DEPENDENCY")
 
 	// Read config file (ignore if not found)

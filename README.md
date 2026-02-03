@@ -36,7 +36,6 @@ go build -o jira-sync .
 | `JIRA_USER` | Yes* | Jira username/email | `user@company.com` |
 | `JIRA_DEFAULTS_PROJECT` | No | Default project key | `MYPROJ` |
 | `JIRA_DEFAULTS_ISSUE_TYPE` | No | Default issue type (default: `Task`) | `Story`, `Bug`, `Task` |
-| `JIRA_DEFAULTS_END_DATE_OFFSET` | No | Days to add for end date (default: `7`) | `14` |
 | `JIRA_LINK_TYPES_DEPENDENCY` | No | Link type name (default: `Blocks`) | `Blocks`, `Relates` |
 
 *Can also be set in config file
@@ -65,7 +64,6 @@ jira:
 defaults:
   project: GUARD
   issue_type: Task
-  end_date_offset: 7
 
 link_types:
   dependency: Blocks

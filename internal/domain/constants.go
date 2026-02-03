@@ -13,9 +13,6 @@ const DefaultLinkType = "Blocking"
 // DefaultIssueType is the default Jira issue type.
 const DefaultIssueType = "Story"
 
-// DefaultEndDateOffset is the default number of days to add for end date calculation.
-const DefaultEndDateOffset = 7
-
 // DefaultJiraState is the default Jira ticket state for new tasks.
 const DefaultJiraState = "To Do"
 
