@@ -44,10 +44,6 @@ components:
   domain:
     in: domain/**
 
-  # Supporting
-  config:
-    in: config/**
-
   # Integration tests (separate component)
   integration:
     in: integration/**
@@ -98,10 +94,6 @@ deps:
   hashing:
     mayDependOn:
       - ports
-
-  # Config is standalone
-  config:
-    anyVendorDeps: true
 
   # Integration tests can use everything
   integration:
