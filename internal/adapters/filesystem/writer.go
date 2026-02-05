@@ -30,7 +30,6 @@ type frontmatterOutput struct {
 	JiraBlocks      []string `yaml:"jira-blocks,flow"`
 	JiraIsBlockedBy []string `yaml:"jira-is-blocked-by,flow"`
 	ContentHash     string   `yaml:"content-hash"`
-	LastSynced      string   `yaml:"last-synced"`
 }
 
 // Marshal converts a TaskFile to markdown content with YAML frontmatter.
@@ -60,7 +59,6 @@ func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 		JiraBlocks:      jiraBlocks,
 		JiraIsBlockedBy: jiraIsBlockedBy,
 		ContentHash:     task.Frontmatter.ContentHash,
-		LastSynced:      task.Frontmatter.LastSynced,
 	}
 
 	var buf bytes.Buffer

@@ -295,32 +295,6 @@ func TestExport_ComputesContentHash(t *testing.T) {
 	assert.Equal(t, "computed-hash-abc123", result.Task.Frontmatter.ContentHash)
 }
 
-func TestExport_SetsLastSynced(t *testing.T) {
-	mockJira := jira.NewMockJiraClient()
-	mockJira.AddStoredIssue(&ports.IssueWithLinks{
-		Key:     "TEST-1",
-		Project: "TEST",
-		Summary: "Test",
-		Created: "2026-01-15T14:30:45.000+0000",
-	})
-
-	svc := NewService(mockJira, &mockHashComputer{}, nil)
-	beforeExport := time.Now().UTC().Add(-time.Second) // Add buffer for timing
-
-	result, err := svc.Export(context.Background(), "TEST-1", Options{})
-
-	require.NoError(t, err)
-	assert.NotEmpty(t, result.Task.Frontmatter.LastSynced)
-
-	// Parse and verify it's a valid RFC3339 timestamp
-	lastSynced, parseErr := time.Parse(time.RFC3339, result.Task.Frontmatter.LastSynced)
-	require.NoError(t, parseErr)
-
-	// Should be after beforeExport and not too far in the future
-	assert.True(t, lastSynced.After(beforeExport), "lastSynced should be after beforeExport")
-	assert.True(t, lastSynced.Before(time.Now().UTC().Add(time.Minute)), "lastSynced should not be far in the future")
-}
-
 func TestExport_SetsSyncStatusLinked(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	mockJira.AddStoredIssue(&ports.IssueWithLinks{

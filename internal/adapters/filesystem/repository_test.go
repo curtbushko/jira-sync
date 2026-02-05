@@ -28,7 +28,6 @@ jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
-last-synced: ""
 ---
 
 Description`
@@ -70,7 +69,6 @@ func TestTaskRepository_WriteTask(t *testing.T) {
 			JiraParent:       "GUARD-100",
 			JiraIsBlockedBy: []string{},
 			ContentHash:      "",
-			LastSynced:       "",
 		},
 		Description: "Test description",
 	}
@@ -128,7 +126,6 @@ jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
-last-synced: ""
 ---
 
 Description %d`, idx, idx, idx)
@@ -234,7 +231,6 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 			JiraParent:       "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-1", "KB-2", "ERR-1"},
 			ContentHash:      "somehash123",
-			LastSynced:       "2026-01-16T10:00:00Z",
 		},
 		Description: `Implement pod listing logic.
 
@@ -264,6 +260,5 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.Frontmatter.JiraParent, loaded.Frontmatter.JiraParent)
 	assert.Equal(t, original.Frontmatter.JiraIsBlockedBy, loaded.Frontmatter.JiraIsBlockedBy)
 	assert.Equal(t, original.Frontmatter.ContentHash, loaded.Frontmatter.ContentHash)
-	assert.Equal(t, original.Frontmatter.LastSynced, loaded.Frontmatter.LastSynced)
 	assert.Equal(t, original.Description, loaded.Description)
 }

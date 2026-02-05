@@ -97,7 +97,6 @@ func (s *Service) Export(ctx context.Context, issueKey string, opts Options) (*R
 			JiraParent:      parent,
 			JiraBlocks:      blocks,
 			JiraIsBlockedBy: blockedBy,
-			LastSynced:      time.Now().UTC().Format(time.RFC3339),
 		},
 		Description: issue.Description,
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
@@ -132,7 +131,6 @@ func (s *Service) syncFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 	}
 
 	// Update sync metadata
-	task.Frontmatter.LastSynced = time.Now().UTC().Format(time.RFC3339)
 	task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
 }
 

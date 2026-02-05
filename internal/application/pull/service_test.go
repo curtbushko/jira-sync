@@ -44,7 +44,6 @@ func TestPullTask_SyncsFromJira(t *testing.T) {
 	assert.Equal(t, "KB-1: New Title", task.Frontmatter.Title)
 	assert.Equal(t, "New description", task.Description)
 	assert.Equal(t, "In Progress", task.Frontmatter.JiraState)
-	assert.NotEmpty(t, task.Frontmatter.LastSynced)
 	assert.NotEmpty(t, task.Frontmatter.ContentHash)
 }
 

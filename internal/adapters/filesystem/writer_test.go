@@ -22,7 +22,6 @@ func TestWriter_Marshal_ValidTask(t *testing.T) {
 			JiraParent:       "GUARD-100",
 			JiraIsBlockedBy: []string{},
 			ContentHash:      "",
-			LastSynced:       "",
 		},
 		Description: "Task description",
 	}
@@ -54,7 +53,6 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 			JiraParent:       "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-3", "ERR-1"},
 			ContentHash:      "abc123",
-			LastSynced:       "2026-01-16T10:00:00Z",
 		},
 		Description: "Implement detection.",
 	}
@@ -69,8 +67,6 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 	assert.Contains(t, content, "KB-3")
 	assert.Contains(t, content, "ERR-1")
 	assert.Contains(t, content, "content-hash: abc123")
-	assert.Contains(t, content, "last-synced:")
-	assert.Contains(t, content, "2026-01-16T10:00:00Z")
 }
 
 func TestWriter_Marshal_WithJiraIsBlockedBy(t *testing.T) {

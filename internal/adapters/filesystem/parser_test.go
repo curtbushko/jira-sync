@@ -22,7 +22,6 @@ jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
-last-synced: ""
 ---
 
 Task description here.`
@@ -59,7 +58,6 @@ jira-dependencies:
   - KB-3
   - ERR-1
 content-hash: "abc123"
-last-synced: "2026-01-16T10:00:00Z"
 ---
 
 Implement detection of replica failures.
@@ -97,7 +95,6 @@ jira-dependencies:
   - KB-1
   - KB-2
 content-hash: ""
-last-synced: ""
 ---
 
 Task with jira dependencies.`

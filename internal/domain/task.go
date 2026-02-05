@@ -26,7 +26,6 @@ type Frontmatter struct {
 	JiraBlocks      []string `yaml:"jira-blocks"`       // Issues this task blocks (OutwardIssue)
 	JiraIsBlockedBy []string `yaml:"jira-is-blocked-by"` // Issues that block this task (InwardIssue)
 	ContentHash     string   `yaml:"content-hash"`
-	LastSynced      string   `yaml:"last-synced"`
 }
 
 // TaskID extracts the task ID prefix from the title (e.g., "KB-1" from "KB-1: Title").

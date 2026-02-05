@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
@@ -367,10 +366,8 @@ func executePushLinkPhase(ctx context.Context, flags pushFlags, pushCtx *pushCon
 
 func savePushLinkedTasks(pushCtx *pushContext, created []*domain.TaskFile, allTasks []*domain.TaskFile) error {
 	taskMap := buildPushTaskMap(allTasks)
-	now := time.Now().UTC().Format(time.RFC3339)
 
 	for _, task := range created {
-		task.Frontmatter.LastSynced = now
 		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			return fmt.Errorf("save task %s: %w", task.Path, err)
@@ -436,14 +433,12 @@ func executePushUpdatePhase(ctx context.Context, pushCtx *pushContext, categoriz
 	}
 
 	taskMap := buildPushTaskMap(tasks)
-	now := time.Now().UTC().Format(time.RFC3339)
 	for _, task := range categorized.NeedsUpdate {
 		slog.Debug("saving updated task",
 			slog.String("task", task.TaskID()),
 			slog.String("jira_key", task.Frontmatter.JiraNumber),
 			slog.String("path", task.Path),
 		)
-		task.Frontmatter.LastSynced = now
 		task.Frontmatter.ContentHash = pushCtx.hasher.ComputeHash(task)
 		if err := pushCtx.repo.WriteTask(task); err != nil {
 			slog.Debug("failed to save task", slog.String("path", task.Path), slog.String("error", err.Error()))

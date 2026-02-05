@@ -86,7 +86,6 @@ func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
 			JiraBlocks:      []string{"GUARD-101"},
 			JiraIsBlockedBy: []string{"GUARD-200"},
 			ContentHash:     "abc123",
-			LastSynced:      "2026-01-20T10:00:00Z",
 		},
 	}
 
@@ -131,7 +130,6 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 			JiraBlocks:      existingBlocks,
 			JiraIsBlockedBy: existingBlockedBy,
 			ContentHash:     "existinghash",
-			LastSynced:      "2026-01-15T08:00:00Z",
 		},
 	}
 
@@ -146,7 +144,6 @@ func TestMigrateFrontmatter_PreservesExistingValues(t *testing.T) {
 	assert.Equal(t, existingBlocks, task.Frontmatter.JiraBlocks)
 	assert.Equal(t, existingBlockedBy, task.Frontmatter.JiraIsBlockedBy)
 	assert.Equal(t, "existinghash", task.Frontmatter.ContentHash)
-	assert.Equal(t, "2026-01-15T08:00:00Z", task.Frontmatter.LastSynced)
 }
 
 func TestMigrateFrontmatter_InitializesEmptySlices(t *testing.T) {

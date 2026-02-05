@@ -134,7 +134,6 @@ func runCreate(cmd *cobra.Command, _ []string) error {
 			JiraBlocks:      []string{},
 			JiraIsBlockedBy: jiraDeps, // deps = issues that block this task
 			ContentHash:     "",
-			LastSynced:      "",
 		},
 		Description: description,
 	}

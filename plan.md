@@ -167,7 +167,6 @@ jira-parent: GUARD-100
 sync-dependencies: []
 jira-dependencies: []
 content-hash: ""
-last-synced: ""
 ---
 
 Initialize the Kubebuilder project using the CLI tool.
@@ -195,7 +194,6 @@ Initialize the Kubebuilder project using the CLI tool.
 | `sync-dependencies` | array | Task IDs for creation ordering (local only) |
 | `jira-dependencies` | array | Task IDs for Jira "blocks" links |
 | `content-hash` | string | SHA256 hash for change detection |
-| `last-synced` | datetime | ISO 8601 timestamp of last sync |
 
 ### Sync Status Values
 
@@ -432,7 +430,6 @@ jira-sync pull --force
 
 4. **Conflict Detection:**
    - Local changed: `content-hash` differs from file
-   - Jira changed: `updated` timestamp > `last-synced`
    - Both changed: CONFLICT (use `--force` to resolve)
 
 5. **Dependency Mapping:**
@@ -492,7 +489,6 @@ jira-sync migrate --default-project GUARD
 | `sync-dependencies` | `[]` |
 | `jira-dependencies` | `[]` |
 | `content-hash` | `""` |
-| `last-synced` | `""` |
 
 ---
 
@@ -591,7 +587,6 @@ The `content-hash` field stores a SHA256 hash of the task file (frontmatter + de
 
 **Pull conflict detection:**
 - Local hash differs → local changed
-- Jira `updated` > `last-synced` → Jira changed
 - Both differ → CONFLICT
 
 | sync-status | content-hash | Action |
