@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -53,7 +55,7 @@ func init() {
 
 	// Global flags
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "",
-		"config file (default is $HOME/.jira-sync.yaml)")
+		"config file (default is $HOME/.config/jira-sync/config.yaml)")
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false,
 		"Enable debug logging")
 
@@ -71,14 +73,15 @@ func initConfig() {
 		// Use config file from the flag
 		viper.SetConfigFile(cfgFile)
 	} else {
-		// Search for config in home directory and current directory
+		// Search for config in XDG config directory and current directory
 		home, err := os.UserHomeDir()
 		if err == nil {
-			viper.AddConfigPath(home)
+			configDir := filepath.Join(home, ".config", domain.DefaultConfigDir)
+			viper.AddConfigPath(configDir)
 		}
 		viper.AddConfigPath(".")
 		viper.SetConfigType("yaml")
-		viper.SetConfigName(".jira-sync")
+		viper.SetConfigName("config")
 	}
 
 	// Environment variable support

@@ -7,6 +7,14 @@ const (
 	SyncStatusLinked  = "linked"  // Created and dependencies linked
 )
 
+// Config file location constants.
+const (
+	// DefaultConfigDir is the directory for jira-sync config under XDG config home.
+	DefaultConfigDir = "jira-sync"
+	// DefaultConfigFile is the config filename.
+	DefaultConfigFile = "config.yaml"
+)
+
 // DefaultLinkType is the default Jira link type for dependencies.
 const DefaultLinkType = "Blocking"
 
