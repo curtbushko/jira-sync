@@ -80,6 +80,27 @@ linters:
     - wrapcheck         # External error wrapping can be overly strict
     - ireturn           # Interface returns not always practical
 
+  settings:
+    varnamelen:
+      min-name-length: 1
+      max-distance: 20
+      ignore-type-assert-ok: true
+      ignore-map-index-ok: true
+      ignore-chan-recv-ok: true
+      ignore-decls:
+        - i int
+      ignore-names:
+        - err
+        - ok
+        - id
+        - i
+        - j
+        - k
+        - v
+        - t
+        - tt
+        - tc
+
 linters-settings:
   revive:
     rules:
@@ -120,23 +141,6 @@ linters-settings:
     checks: ["all"]
 
 
-
-  varnamelen:
-    min-name-length: 1
-    ignore-type-assert-ok: true
-    ignore-map-index-ok: true
-    ignore-chan-recv-ok: true
-    ignore-names:
-      - err
-      - ok
-      - id
-      - i
-      - j
-      - k
-      - v
-      - t
-      - tt
-      - tc
 
   funlen:
     lines: 80
