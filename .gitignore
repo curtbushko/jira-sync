@@ -36,4 +36,8 @@ go.work.sum
 /temp
 .claude/settings.local.json
 
+# Shared configs (copied from golang-shared-configs flake)
+.golangci.yml
+.go-arch-lint.yml
+
 jira-sync

@@ -2,13 +2,15 @@
   description = "Golang flake";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+  inputs.golang-shared-configs.url = "github:curtbushko/golang-shared-configs";
 
-  outputs = { self, nixpkgs }:
+  outputs = { self, nixpkgs, golang-shared-configs }:
     let
       goVersion = 25; # Change this to update the whole stack
 
       supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forEachSupportedSystem = f: nixpkgs.lib.genAttrs supportedSystems (system: f {
+        inherit system;
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
@@ -35,7 +37,10 @@
         go = final."go_1_${toString goVersion}";
       };
 
-      devShells = forEachSupportedSystem ({ pkgs }: {
+      devShells = forEachSupportedSystem ({ pkgs, system }:
+        let
+          sharedConfigs = golang-shared-configs.packages.${system}.all-configs;
+        in {
         default = pkgs.mkShell {
           packages = with pkgs; [
             docker
@@ -44,7 +49,13 @@
             gotools
             golangci-lint
             (go-ai-lint { inherit pkgs; })
+            sharedConfigs
           ];
+
+          shellHook = ''
+            cp -f ${sharedConfigs}/.golangci.yml .golangci.yml
+            cp -f ${sharedConfigs}/.go-arch-lint.yml .go-arch-lint.yml
+          '';
         };
       });
     };
