@@ -164,10 +164,16 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 		status = issue.Fields.Status.Name
 	}
 
-	// Extract assignee username
+	// Extract assignee (prefer DisplayName for JIRA Cloud, fallback to Name for Server)
 	var assignee string
 	if issue.Fields != nil && issue.Fields.Assignee != nil {
-		assignee = issue.Fields.Assignee.Name
+		if issue.Fields.Assignee.DisplayName != "" {
+			assignee = issue.Fields.Assignee.DisplayName
+		} else if issue.Fields.Assignee.Name != "" {
+			assignee = issue.Fields.Assignee.Name
+		} else if issue.Fields.Assignee.EmailAddress != "" {
+			assignee = issue.Fields.Assignee.EmailAddress
+		}
 	}
 
 	// Extract updated timestamp
@@ -320,7 +326,13 @@ func populateIssueFields(result *ports.IssueWithLinks, issue *jira.Issue) {
 	}
 
 	if issue.Fields.Assignee != nil {
-		result.Assignee = issue.Fields.Assignee.Name
+		if issue.Fields.Assignee.DisplayName != "" {
+			result.Assignee = issue.Fields.Assignee.DisplayName
+		} else if issue.Fields.Assignee.Name != "" {
+			result.Assignee = issue.Fields.Assignee.Name
+		} else if issue.Fields.Assignee.EmailAddress != "" {
+			result.Assignee = issue.Fields.Assignee.EmailAddress
+		}
 	}
 
 	if issue.Fields.Type.Name != "" {
