@@ -130,6 +130,8 @@ func (s *Service) syncFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 		task.Frontmatter.JiraState = jiraIssue.Status
 	}
 
+	task.Frontmatter.JiraAssignee = jiraIssue.Assignee
+
 	// Update sync metadata
 	task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
 }

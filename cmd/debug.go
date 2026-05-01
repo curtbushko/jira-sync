@@ -67,15 +67,15 @@ func runDebug(_ *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Found %d links:\n\n", len(links))
-	for i, link := range links {
+	for index, link := range links {
 		slog.Debug("link details",
-			slog.Int("index", i),
+			slog.Int("index", index),
 			slog.String("id", link.ID),
 			slog.String("type", link.Type),
 			slog.String("inward_issue", link.InwardIssue),
 			slog.String("outward_issue", link.OutwardIssue),
 		)
-		fmt.Printf("[%d] ID=%q\n", i, link.ID)
+		fmt.Printf("[%d] ID=%q\n", index, link.ID)
 		fmt.Printf("    Type=%q\n", link.Type)
 		fmt.Printf("    InwardIssue=%q\n", link.InwardIssue)
 		fmt.Printf("    OutwardIssue=%q\n", link.OutwardIssue)

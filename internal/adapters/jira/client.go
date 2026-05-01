@@ -164,6 +164,12 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 		status = issue.Fields.Status.Name
 	}
 
+	// Extract assignee username
+	var assignee string
+	if issue.Fields != nil && issue.Fields.Assignee != nil {
+		assignee = issue.Fields.Assignee.Name
+	}
+
 	// Extract updated timestamp
 	var updated time.Time
 	if issue.Fields != nil {
@@ -176,6 +182,7 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 		Summary:     issue.Fields.Summary,
 		Description: issue.Fields.Description,
 		Status:      status,
+		Assignee:    assignee,
 		Updated:     updated,
 	}, nil
 }
@@ -310,6 +317,10 @@ func populateIssueFields(result *ports.IssueWithLinks, issue *jira.Issue) {
 
 	if issue.Fields.Status != nil {
 		result.Status = issue.Fields.Status.Name
+	}
+
+	if issue.Fields.Assignee != nil {
+		result.Assignee = issue.Fields.Assignee.Name
 	}
 
 	if issue.Fields.Type.Name != "" {

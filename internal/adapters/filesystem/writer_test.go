@@ -166,6 +166,49 @@ Second paragraph.
 	assert.Contains(t, content, "- Item 1")
 }
 
+func TestWriter_Marshal_WithAssignee(t *testing.T) {
+	task := &domain.TaskFile{
+		Path: "test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:        "KB-1: Assigned Task",
+			JiraNumber:   "GUARD-101",
+			JiraProject:  "GUARD",
+			JiraState:    "In Progress",
+			JiraAssignee: "john.doe",
+			SyncStatus:   "linked",
+			JiraParent:   "GUARD-100",
+			ContentHash:  "abc123",
+		},
+		Description: "Task with assignee.",
+	}
+
+	writer := NewWriter()
+	content, err := writer.Marshal(task)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "jira-assignee: john.doe")
+}
+
+func TestWriter_Marshal_WithoutAssignee(t *testing.T) {
+	task := &domain.TaskFile{
+		Path: "test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:       "KB-2: Unassigned Task",
+			JiraProject: "GUARD",
+			JiraState:   "Todo",
+			SyncStatus:  "pending",
+			JiraParent:  "GUARD-100",
+		},
+		Description: "Task without assignee.",
+	}
+
+	writer := NewWriter()
+	content, err := writer.Marshal(task)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "jira-assignee: \"\"")
+}
+
 func hasProperFrontmatterDelimiters(content string) bool {
 	lines := splitLines(content)
 	if len(lines) < 2 {

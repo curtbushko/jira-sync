@@ -300,3 +300,48 @@ Task description.`
 	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraIsBlockedBy)
 	assert.Equal(t, []string{"KB-0"}, task.Frontmatter.JiraIsBlockedBy)
 }
+
+func TestParser_Parse_WithAssignee(t *testing.T) {
+	content := `---
+title: "KB-1: Test Task"
+jira-number: "GUARD-101"
+jira-project: GUARD
+jira-state: In Progress
+jira-assignee: john.doe
+created-date: "2026-01-16"
+jira-url: "https://company.atlassian.net/browse/GUARD-101"
+sync-status: linked
+jira-parent: GUARD-100
+content-hash: "abc123"
+---
+
+Task with assignee.`
+
+	parser := NewParser()
+	task, err := parser.Parse("test.md", content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "john.doe", task.Frontmatter.JiraAssignee)
+}
+
+func TestParser_Parse_WithoutAssignee(t *testing.T) {
+	content := `---
+title: "KB-2: Unassigned Task"
+jira-number: ""
+jira-project: GUARD
+jira-state: Todo
+created-date: "2026-01-16"
+jira-url: ""
+sync-status: pending
+jira-parent: GUARD-100
+content-hash: ""
+---
+
+Task without assignee.`
+
+	parser := NewParser()
+	task, err := parser.Parse("test.md", content)
+
+	require.NoError(t, err)
+	assert.Equal(t, "", task.Frontmatter.JiraAssignee)
+}
