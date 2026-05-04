@@ -41,3 +41,4 @@ go.work.sum
 .go-arch-lint.yml
 
 jira-sync
+.go-ai-lint.yml
