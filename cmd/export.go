@@ -8,13 +8,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/application/export"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var issueKeyRegex = regexp.MustCompile(`^[A-Z][A-Z0-9]*-\d+$`)

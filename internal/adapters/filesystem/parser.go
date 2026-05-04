@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"gopkg.in/yaml.v3"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 // Parser parses markdown files with YAML frontmatter.

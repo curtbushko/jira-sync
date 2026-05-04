@@ -41,8 +41,8 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title,
-				JiraParent:       parent,
+				Title:           title,
+				JiraParent:      parent,
 				JiraIsBlockedBy: nil,
 			},
 			Description: description,
@@ -77,8 +77,8 @@ func FuzzSHA256HashComputer_ComputeHash(f *testing.F) {
 		differentTask := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title + "X",
-				JiraParent:       parent,
+				Title:           title + "X",
+				JiraParent:      parent,
 				JiraIsBlockedBy: nil,
 			},
 			Description: description,
@@ -116,8 +116,8 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title,
-				JiraParent:       parent,
+				Title:           title,
+				JiraParent:      parent,
 				JiraIsBlockedBy: deps,
 			},
 			Description: description,
@@ -147,8 +147,8 @@ func FuzzSHA256HashComputer_WithDependencies(f *testing.F) {
 			reversedTask := &domain.TaskFile{
 				Path: "test.md",
 				Frontmatter: domain.Frontmatter{
-					Title:            title,
-					JiraParent:       parent,
+					Title:           title,
+					JiraParent:      parent,
 					JiraIsBlockedBy: reversedDeps,
 				},
 				Description: description,
@@ -173,8 +173,8 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 		taskNil := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title,
-				JiraParent:       parent,
+				Title:           title,
+				JiraParent:      parent,
 				JiraIsBlockedBy: nil,
 			},
 			Description: description,
@@ -184,8 +184,8 @@ func FuzzSHA256HashComputer_NilDependencies(f *testing.F) {
 		taskEmpty := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title,
-				JiraParent:       parent,
+				Title:           title,
+				JiraParent:      parent,
 				JiraIsBlockedBy: []string{},
 			},
 			Description: description,

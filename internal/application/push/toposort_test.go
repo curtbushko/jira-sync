@@ -3,9 +3,10 @@ package push
 import (
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 func TestTopologicalSort_SimpleChain(t *testing.T) {

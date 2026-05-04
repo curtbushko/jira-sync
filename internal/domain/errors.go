@@ -7,12 +7,12 @@ import (
 
 // Common domain errors.
 var (
-	ErrInvalidFrontmatter   = errors.New("invalid frontmatter format")
-	ErrMissingTitle         = errors.New("title is required")
-	ErrMissingParent        = errors.New("parent is required")
-	ErrMissingDescription   = errors.New("description is required")
-	ErrDependencyNotFound   = errors.New("dependency not found")
-	ErrCircularDependency   = errors.New("circular dependency detected")
+	ErrInvalidFrontmatter     = errors.New("invalid frontmatter format")
+	ErrMissingTitle           = errors.New("title is required")
+	ErrMissingParent          = errors.New("parent is required")
+	ErrMissingDescription     = errors.New("description is required")
+	ErrDependencyNotFound     = errors.New("dependency not found")
+	ErrCircularDependency     = errors.New("circular dependency detected")
 	ErrJiraAuthentication     = errors.New("jira authentication failed")
 	ErrJiraCreateFailed       = errors.New("failed to create jira issue")
 	ErrJiraUpdateFailed       = errors.New("failed to update jira issue")

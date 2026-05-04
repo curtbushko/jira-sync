@@ -12,7 +12,7 @@ import (
 func FuzzWriter_Marshal(f *testing.F) {
 	// Add seed values for various fields
 	seeds := []struct {
-		title, jiraNumber, createdDate string
+		title, jiraNumber, createdDate           string
 		jiraURL, syncStatus, parent, contentHash string
 		description                              string
 	}{
@@ -60,13 +60,13 @@ func FuzzWriter_Marshal(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            title,
-				JiraNumber:       jiraNumber,
-				CreatedDate:      createdDate,
-				JiraURL:          jiraURL,
-				SyncStatus:       syncStatus,
-				JiraParent:       parent,
-				ContentHash:      contentHash,
+				Title:           title,
+				JiraNumber:      jiraNumber,
+				CreatedDate:     createdDate,
+				JiraURL:         jiraURL,
+				SyncStatus:      syncStatus,
+				JiraParent:      parent,
+				ContentHash:     contentHash,
 				JiraIsBlockedBy: []string{}, // Start with empty deps
 			},
 			Description: description,
@@ -120,9 +120,9 @@ func FuzzWriter_MarshalWithDependencies(f *testing.F) {
 		task := &domain.TaskFile{
 			Path: "test.md",
 			Frontmatter: domain.Frontmatter{
-				Title:            "KB-1: Test",
-				SyncStatus:       "pending",
-				JiraParent:       "GUARD-100",
+				Title:           "KB-1: Test",
+				SyncStatus:      "pending",
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: deps,
 			},
 			Description: "Test description",

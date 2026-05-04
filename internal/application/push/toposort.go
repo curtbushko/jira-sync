@@ -21,24 +21,43 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		return []*domain.TaskFile{}, nil
 	}
 
-	// Build task ID to task map for all tasks (both by local task ID and Jira key)
+	taskByID := buildTaskIndex(allTasks)
+	pendingSet := buildPendingSet(pending)
+	adjList, inDegree, err := buildDependencyGraph(pending, taskByID, pendingSet)
+	if err != nil {
+		return nil, err
+	}
+
+	return runKahnsAlgorithm(pending, taskByID, adjList, inDegree)
+}
+
+// buildTaskIndex creates a map from task ID and Jira key to task.
+func buildTaskIndex(allTasks []*domain.TaskFile) map[string]*domain.TaskFile {
 	taskByID := make(map[string]*domain.TaskFile, len(allTasks)*2)
 	for _, task := range allTasks {
 		taskByID[task.TaskID()] = task
-		// Also index by Jira key if available
 		if task.Frontmatter.JiraNumber != "" {
 			taskByID[task.Frontmatter.JiraNumber] = task
 		}
 	}
+	return taskByID
+}
 
-	// Build pending set for quick lookup
+// buildPendingSet creates a set of pending task IDs for quick lookup.
+func buildPendingSet(pending []*domain.TaskFile) map[string]bool {
 	pendingSet := make(map[string]bool, len(pending))
 	for _, task := range pending {
 		pendingSet[task.TaskID()] = true
 	}
+	return pendingSet
+}
 
-	// Build adjacency list for pending tasks only
-	// Each task maps to its dependencies that are also pending
+// buildDependencyGraph builds the adjacency list and in-degree map for topological sort.
+func buildDependencyGraph(
+	pending []*domain.TaskFile,
+	taskByID map[string]*domain.TaskFile,
+	pendingSet map[string]bool,
+) (map[string][]string, map[string]int, error) {
 	adjList := make(map[string][]string)
 	inDegree := make(map[string]int)
 
@@ -48,40 +67,53 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		inDegree[taskID] = 0
 	}
 
-	// Process dependencies (jira-is-blocked-by = issues that block this task)
 	for _, task := range pending {
-		taskID := task.TaskID()
-		blockedByIDs := task.Frontmatter.JiraIsBlockedBy
-
-		for _, depID := range blockedByIDs {
-			// Parse wiki link format if present: [Title](file.md) -> task ID
-			resolvedDepID := parseWikiLink(depID)
-
-			// Check if dependency exists (either as local task ID or Jira key)
-			depTask, exists := taskByID[resolvedDepID]
-			if !exists {
-				// Dependency not found locally - assume it's an external Jira issue
-				// that already exists (e.g., GUARD-1519)
-				// Skip validation for external dependencies
-				continue
-			}
-
-			// Only count dependencies that are in the pending set
-			// (already created tasks don't affect ordering)
-			depTaskID := depTask.TaskID()
-			if pendingSet[depTaskID] {
-				// depTaskID -> taskID (depTaskID must come before taskID)
-				adjList[depTaskID] = append(adjList[depTaskID], taskID)
-				inDegree[taskID]++
-			} else if depTask.Frontmatter.SyncStatus != domain.SyncStatusCreated &&
-				depTask.Frontmatter.SyncStatus != domain.SyncStatusLinked {
-				// Dependency exists but is not yet created - should be in pending
-				return nil, fmt.Errorf("dependency not found in pending tasks: %s required by %s", depID, taskID)
-			}
+		if err := processDependencies(task, taskByID, pendingSet, adjList, inDegree); err != nil {
+			return nil, nil, err
 		}
 	}
 
-	// Kahn's algorithm for topological sort
+	return adjList, inDegree, nil
+}
+
+// processDependencies processes the dependencies for a single task.
+func processDependencies(
+	task *domain.TaskFile,
+	taskByID map[string]*domain.TaskFile,
+	pendingSet map[string]bool,
+	adjList map[string][]string,
+	inDegree map[string]int,
+) error {
+	taskID := task.TaskID()
+
+	for _, depID := range task.Frontmatter.JiraIsBlockedBy {
+		resolvedDepID := parseWikiLink(depID)
+		depTask, exists := taskByID[resolvedDepID]
+		if !exists {
+			// External Jira issue - skip validation
+			continue
+		}
+
+		depTaskID := depTask.TaskID()
+		if pendingSet[depTaskID] {
+			adjList[depTaskID] = append(adjList[depTaskID], taskID)
+			inDegree[taskID]++
+		} else if depTask.Frontmatter.SyncStatus != domain.SyncStatusCreated &&
+			depTask.Frontmatter.SyncStatus != domain.SyncStatusLinked {
+			return fmt.Errorf("dependency not found in pending tasks: %s required by %s", depID, taskID)
+		}
+	}
+
+	return nil
+}
+
+// runKahnsAlgorithm performs Kahn's algorithm for topological sort.
+func runKahnsAlgorithm(
+	pending []*domain.TaskFile,
+	taskByID map[string]*domain.TaskFile,
+	adjList map[string][]string,
+	inDegree map[string]int,
+) ([]*domain.TaskFile, error) {
 	var queue []string
 	for taskID, degree := range inDegree {
 		if degree == 0 {
@@ -91,14 +123,10 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 
 	var sorted []*domain.TaskFile
 	for len(queue) > 0 {
-		// Pop from queue
 		current := queue[0]
 		queue = queue[1:]
-
-		// Add to sorted result
 		sorted = append(sorted, taskByID[current])
 
-		// Reduce in-degree for all dependent tasks
 		for _, dependent := range adjList[current] {
 			inDegree[dependent]--
 			if inDegree[dependent] == 0 {
@@ -107,17 +135,20 @@ func TopologicalSort(pending, allTasks []*domain.TaskFile) ([]*domain.TaskFile, 
 		}
 	}
 
-	// Check for circular dependency
 	if len(sorted) != len(pending) {
-		// Find tasks involved in cycle
-		var cycleNodes []string
-		for taskID, degree := range inDegree {
-			if degree > 0 {
-				cycleNodes = append(cycleNodes, taskID)
-			}
-		}
-		return nil, fmt.Errorf("circular dependency detected involving: %v", cycleNodes)
+		return nil, detectCyclicDependency(inDegree)
 	}
 
 	return sorted, nil
+}
+
+// detectCyclicDependency returns an error describing the cyclic dependency.
+func detectCyclicDependency(inDegree map[string]int) error {
+	var cycleNodes []string
+	for taskID, degree := range inDegree {
+		if degree > 0 {
+			cycleNodes = append(cycleNodes, taskID)
+		}
+	}
+	return fmt.Errorf("circular dependency detected involving: %v", cycleNodes)
 }

@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 func TestGenerateConfig_CreatesFileAtDefaultLocation(t *testing.T) {

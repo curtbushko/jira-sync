@@ -7,9 +7,10 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 func TestTaskRepository_ReadTask(t *testing.T) {
@@ -59,16 +60,16 @@ func TestTaskRepository_WriteTask(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: filepath.Join(tmpDir, "test.md"),
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Test",
-			JiraNumber:       "",
-			JiraProject:      "GUARD",
-			JiraState:        "Todo",
-			CreatedDate:      "2026-01-16",
-			JiraURL:          "",
-			SyncStatus:       "pending",
-			JiraParent:       "GUARD-100",
+			Title:           "KB-1: Test",
+			JiraNumber:      "",
+			JiraProject:     "GUARD",
+			JiraState:       "Todo",
+			CreatedDate:     "2026-01-16",
+			JiraURL:         "",
+			SyncStatus:      "pending",
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{},
-			ContentHash:      "",
+			ContentHash:     "",
 		},
 		Description: "Test description",
 	}
@@ -221,16 +222,16 @@ func TestTaskRepository_RoundTrip(t *testing.T) {
 	original := &domain.TaskFile{
 		Path: filepath.Join(tmpDir, repo.GenerateFilename()),
 		Frontmatter: domain.Frontmatter{
-			Title:            "ERR-5: Complex Task",
-			JiraNumber:       "GUARD-999",
-			JiraProject:      "GUARD",
-			JiraState:        "In Progress",
-			CreatedDate:      "2026-01-16",
-			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
-			SyncStatus:       "linked",
-			JiraParent:       "GUARD-100",
+			Title:           "ERR-5: Complex Task",
+			JiraNumber:      "GUARD-999",
+			JiraProject:     "GUARD",
+			JiraState:       "In Progress",
+			CreatedDate:     "2026-01-16",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-999",
+			SyncStatus:      "linked",
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-1", "KB-2", "ERR-1"},
-			ContentHash:      "somehash123",
+			ContentHash:     "somehash123",
 		},
 		Description: `Implement pod listing logic.
 

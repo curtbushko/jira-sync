@@ -10,15 +10,16 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/application/pull"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // pullFlags holds all the parsed flags for the pull command.
@@ -95,7 +96,7 @@ func runPull(cmd *cobra.Command, args []string) error {
 
 	if !flags.skipConfirm {
 		if !confirmPull(len(tasks)) {
-			color.Yellow("Cancelled")
+			color.Yellow("Canceled")
 			return nil
 		}
 	}

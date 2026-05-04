@@ -7,14 +7,15 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/application/push"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestE2E_CreateAndSyncWorkflow tests the full workflow:
@@ -38,9 +39,9 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 		{
 			Path: filepath.Join(tmpDir, "20260116-100000.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-1: Initialize Project",
-				SyncStatus:   domain.SyncStatusPending,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-1: Initialize Project",
+				SyncStatus:      domain.SyncStatusPending,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{},
 			},
 			Description: "Initialize the project repository.",
@@ -48,9 +49,9 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 		{
 			Path: filepath.Join(tmpDir, "20260116-100001.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-2: Create Types",
-				SyncStatus:   domain.SyncStatusPending,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-2: Create Types",
+				SyncStatus:      domain.SyncStatusPending,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-1"},
 			},
 			Description: "Create shared type definitions.",
@@ -58,9 +59,9 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 		{
 			Path: filepath.Join(tmpDir, "20260116-100002.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "ERR-1: Detector Stub",
-				SyncStatus:   domain.SyncStatusPending,
-				JiraParent:       "GUARD-100",
+				Title:           "ERR-1: Detector Stub",
+				SyncStatus:      domain.SyncStatusPending,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-1"},
 			},
 			Description: "Create detector stub implementation.",
@@ -68,9 +69,9 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 		{
 			Path: filepath.Join(tmpDir, "20260116-100003.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "CTRL-1: Controller Scaffold",
-				SyncStatus:   domain.SyncStatusPending,
-				JiraParent:       "GUARD-100",
+				Title:           "CTRL-1: Controller Scaffold",
+				SyncStatus:      domain.SyncStatusPending,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-2", "ERR-1"},
 			},
 			Description: "Create controller scaffold.",
@@ -110,8 +111,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 
 	// Save updated tasks
 	for _, task := range categorized.Pending {
-		err := repo.WriteTask(task)
-		require.NoError(t, err)
+		writeErr := repo.WriteTask(task)
+		require.NoError(t, writeErr)
 	}
 
 	// Step 4: Link dependencies
@@ -129,8 +130,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 	// Save updated tasks with content hash
 	for _, task := range categorized.Pending {
 		task.Frontmatter.ContentHash = hasher.ComputeHash(task)
-		err := repo.WriteTask(task)
-		require.NoError(t, err)
+		writeErr := repo.WriteTask(task)
+		require.NoError(t, writeErr)
 	}
 
 	// Step 5: Reload and verify no updates needed
@@ -147,8 +148,8 @@ func TestE2E_CreateAndSyncWorkflow(t *testing.T) {
 	for _, task := range loadedTasks {
 		if task.TaskID() == "KB-1" {
 			task.Description = "UPDATED: Initialize the project repository with new requirements."
-			err := repo.WriteTask(task)
-			require.NoError(t, err)
+			writeErr := repo.WriteTask(task)
+			require.NoError(t, writeErr)
 			break
 		}
 	}
@@ -187,40 +188,40 @@ func TestE2E_DependencyResolution(t *testing.T) {
 		{
 			Path: filepath.Join(tmpDir, "kb1.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-1: First",
-				JiraNumber:   "GUARD-101",
-				SyncStatus:   domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-1: First",
+				JiraNumber:      "GUARD-101",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
 			Path: filepath.Join(tmpDir, "kb2.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-2: Second",
-				JiraNumber:   "GUARD-102",
-				SyncStatus:   domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-2: Second",
+				JiraNumber:      "GUARD-102",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-1"},
 			},
 		},
 		{
 			Path: filepath.Join(tmpDir, "kb3.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-3: Third",
-				JiraNumber:   "GUARD-103",
-				SyncStatus:   domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-3: Third",
+				JiraNumber:      "GUARD-103",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-1"},
 			},
 		},
 		{
 			Path: filepath.Join(tmpDir, "kb4.md"),
 			Frontmatter: domain.Frontmatter{
-				Title:        "KB-4: Fourth",
-				JiraNumber:   "GUARD-104",
-				SyncStatus:   domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-4: Fourth",
+				JiraNumber:      "GUARD-104",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-2", "KB-3"},
 			},
 		},
@@ -257,14 +258,14 @@ func TestE2E_RoundTrip_PreservesAllFields(t *testing.T) {
 	original := &domain.TaskFile{
 		Path: filepath.Join(tmpDir, "test.md"),
 		Frontmatter: domain.Frontmatter{
-			Title:            "ERR-5: Complex Task",
-			JiraNumber:       "GUARD-999",
-			CreatedDate:      "2026-01-16",
-			JiraURL:          "https://test.atlassian.net/browse/GUARD-999",
-			SyncStatus:       domain.SyncStatusLinked,
-			JiraParent:       "GUARD-100",
+			Title:           "ERR-5: Complex Task",
+			JiraNumber:      "GUARD-999",
+			CreatedDate:     "2026-01-16",
+			JiraURL:         "https://test.atlassian.net/browse/GUARD-999",
+			SyncStatus:      domain.SyncStatusLinked,
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-1", "KB-2", "ERR-1"},
-			ContentHash:      "somehash123",
+			ContentHash:     "somehash123",
 		},
 		Description: `Implement pod listing logic.
 

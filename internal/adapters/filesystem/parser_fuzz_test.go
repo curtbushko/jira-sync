@@ -79,22 +79,28 @@ Description`,
 		// The parser should never panic, regardless of input
 		task, err := parser.Parse("fuzz.md", content)
 
-		// If no error, task should be valid
-		if err == nil {
-			if task == nil {
-				t.Error("Parse returned nil task without error")
-				return
-			}
-			if task.Path != "fuzz.md" {
-				t.Errorf("Expected path 'fuzz.md', got %q", task.Path)
-			}
-			// Title and parent are required
-			if task.Frontmatter.Title == "" {
-				t.Error("Parse returned empty title without error")
-			}
-			if task.Frontmatter.JiraParent == "" {
-				t.Error("Parse returned empty parent without error")
-			}
+		// Skip validation if parsing failed (expected for invalid input)
+		if err != nil {
+			return
+		}
+
+		// Task should never be nil when no error
+		if task == nil {
+			t.Error("Parse returned nil task without error")
+			return
+		}
+
+		// Validate path
+		if task.Path != "fuzz.md" {
+			t.Errorf("Expected path 'fuzz.md', got %q", task.Path)
+		}
+
+		// Title and parent are required
+		if task.Frontmatter.Title == "" {
+			t.Error("Parse returned empty title without error")
+		}
+		if task.Frontmatter.JiraParent == "" {
+			t.Error("Parse returned empty parent without error")
 		}
 	})
 }

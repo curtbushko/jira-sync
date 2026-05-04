@@ -8,9 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 var cfgFile string

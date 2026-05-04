@@ -26,7 +26,7 @@ type TaskRepository interface {
 // Issue represents a Jira issue.
 type Issue struct {
 	Key            string
-	Self           string    // URL to the issue
+	Self           string // URL to the issue
 	Summary        string
 	Description    string
 	Status         string

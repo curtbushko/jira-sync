@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 )
 
 var debugCmd = &cobra.Command{

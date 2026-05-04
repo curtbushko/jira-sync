@@ -5,9 +5,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+
+	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 )
 
 // migrateFlags holds all the parsed flags for the migrate command.

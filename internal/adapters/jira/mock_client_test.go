@@ -5,9 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/ports"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/curtbushko/jira-sync/internal/ports"
 )
 
 func TestMockJiraClient_CreateIssue_DefaultBehavior(t *testing.T) {

@@ -3,25 +3,26 @@ package filesystem
 import (
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 func TestWriter_Marshal_ValidTask(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Test",
-			JiraNumber:       "",
-			JiraProject:      "GUARD",
-			JiraState:        "Todo",
-			CreatedDate:      "2026-01-16",
-			JiraURL:          "",
-			SyncStatus:       "pending",
-			JiraParent:       "GUARD-100",
+			Title:           "KB-1: Test",
+			JiraNumber:      "",
+			JiraProject:     "GUARD",
+			JiraState:       "Todo",
+			CreatedDate:     "2026-01-16",
+			JiraURL:         "",
+			SyncStatus:      "pending",
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{},
-			ContentHash:      "",
+			ContentHash:     "",
 		},
 		Description: "Task description",
 	}
@@ -43,16 +44,16 @@ func TestWriter_Marshal_WithDependencies(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "ERR-2: Detection",
-			JiraNumber:       "GUARD-102",
-			JiraProject:      "GUARD",
-			JiraState:        "In Progress",
-			CreatedDate:      "2026-01-16",
-			JiraURL:          "https://company.atlassian.net/browse/GUARD-102",
-			SyncStatus:       "linked",
-			JiraParent:       "GUARD-100",
+			Title:           "ERR-2: Detection",
+			JiraNumber:      "GUARD-102",
+			JiraProject:     "GUARD",
+			JiraState:       "In Progress",
+			CreatedDate:     "2026-01-16",
+			JiraURL:         "https://company.atlassian.net/browse/GUARD-102",
+			SyncStatus:      "linked",
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-3", "ERR-1"},
-			ContentHash:      "abc123",
+			ContentHash:     "abc123",
 		},
 		Description: "Implement detection.",
 	}
@@ -73,11 +74,11 @@ func TestWriter_Marshal_WithJiraIsBlockedBy(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "ERR-3: Deps Test",
-			JiraProject:      "GUARD",
-			JiraState:        "Todo",
-			SyncStatus:       "pending",
-			JiraParent:       "GUARD-100",
+			Title:           "ERR-3: Deps Test",
+			JiraProject:     "GUARD",
+			JiraState:       "Todo",
+			SyncStatus:      "pending",
+			JiraParent:      "GUARD-100",
 			JiraIsBlockedBy: []string{"KB-1", "KB-2"},
 		},
 		Description: "Test",
@@ -213,15 +214,15 @@ func TestWriter_Marshal_WithResolutionDate(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "test.md",
 		Frontmatter: domain.Frontmatter{
-			Title:                "KB-1: Resolved Task",
-			JiraNumber:           "GUARD-101",
-			JiraProject:          "GUARD",
-			JiraState:            "Done",
-			JiraAssignee:         "john.doe",
-			JiraResolutionDate:   "2026-01-20T14:30:00.000-0700",
-			SyncStatus:           "linked",
-			JiraParent:           "GUARD-100",
-			ContentHash:          "abc123",
+			Title:              "KB-1: Resolved Task",
+			JiraNumber:         "GUARD-101",
+			JiraProject:        "GUARD",
+			JiraState:          "Done",
+			JiraAssignee:       "john.doe",
+			JiraResolutionDate: "2026-01-20T14:30:00.000-0700",
+			SyncStatus:         "linked",
+			JiraParent:         "GUARD-100",
+			ContentHash:        "abc123",
 		},
 		Description: "Task with resolution date.",
 	}

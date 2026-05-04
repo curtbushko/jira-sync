@@ -3,9 +3,10 @@ package pull
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestExtractBlockingRelationships_BothDirections(t *testing.T) {
@@ -17,7 +18,7 @@ func TestExtractBlockingRelationships_BothDirections(t *testing.T) {
 	}
 
 	jiraLinks := []ports.IssueLink{
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},  // We block GUARD-101
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"}, // We block GUARD-101
 		{Type: "Blocking", InwardIssue: "GUARD-200", OutwardIssue: ""}, // We are blocked by GUARD-200
 	}
 
@@ -101,9 +102,9 @@ func TestExtractBlockingRelationships_IgnoresOtherLinkTypes(t *testing.T) {
 
 	jiraLinks := []ports.IssueLink{
 		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-101"},
-		{Type: "Relates", InwardIssue: "", OutwardIssue: "GUARD-102"},   // Different type - ignored
+		{Type: "Relates", InwardIssue: "", OutwardIssue: "GUARD-102"}, // Different type - ignored
 		{Type: "Blocking", InwardIssue: "GUARD-200", OutwardIssue: ""},
-		{Type: "Clones", InwardIssue: "GUARD-201", OutwardIssue: ""},   // Different type - ignored
+		{Type: "Clones", InwardIssue: "GUARD-201", OutwardIssue: ""}, // Different type - ignored
 	}
 
 	detector := NewDependencyDetector("Blocking")
@@ -125,7 +126,7 @@ func TestExtractBlockingRelationships_CustomLinkType(t *testing.T) {
 
 	jiraLinks := []ports.IssueLink{
 		{Type: "CustomBlocks", InwardIssue: "", OutwardIssue: "GUARD-101"},
-		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"},       // Wrong type
+		{Type: "Blocking", InwardIssue: "", OutwardIssue: "GUARD-102"}, // Wrong type
 		{Type: "CustomBlocks", InwardIssue: "GUARD-200", OutwardIssue: ""},
 	}
 

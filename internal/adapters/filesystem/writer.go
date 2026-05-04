@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"gopkg.in/yaml.v3"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 // Writer marshals TaskFile to markdown with YAML frontmatter.

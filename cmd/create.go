@@ -8,11 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+
+	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 var createCmd = &cobra.Command{

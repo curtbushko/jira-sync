@@ -11,11 +11,11 @@ import (
 
 // Result contains the result of pulling a task from Jira.
 type Result struct {
-	Task           *domain.TaskFile
-	UpdatedLinks   bool     // Whether blocking relationships were updated
-	JiraBlocks     []string // Issues this task blocks
+	Task            *domain.TaskFile
+	UpdatedLinks    bool     // Whether blocking relationships were updated
+	JiraBlocks      []string // Issues this task blocks
 	JiraIsBlockedBy []string // Issues that block this task
-	Error          error
+	Error           error
 }
 
 // Service handles pulling from Jira to local files.

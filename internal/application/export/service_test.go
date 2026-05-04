@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // mockHashComputer implements ports.HashComputer for testing.
@@ -160,10 +161,10 @@ func TestExport_IgnoresOtherLinkTypes(t *testing.T) {
 		Summary: "Test with Mixed Links",
 		Created: "2026-01-15T14:30:45.000+0000",
 		Links: []ports.IssueLink{
-			{ID: "link-1", Type: "Blocking", InwardIssue: "TEST-1"},   // Goes to JiraBlocks
-			{ID: "link-2", Type: "Relates", InwardIssue: "TEST-2"},  // Ignored (not Blocks type)
-			{ID: "link-3", Type: "Clones", InwardIssue: "TEST-4"},   // Ignored (not Blocks type)
-			{ID: "link-4", Type: "Blocking", OutwardIssue: "TEST-5"},  // Goes to JiraIsBlockedBy
+			{ID: "link-1", Type: "Blocking", InwardIssue: "TEST-1"},  // Goes to JiraBlocks
+			{ID: "link-2", Type: "Relates", InwardIssue: "TEST-2"},   // Ignored (not Blocks type)
+			{ID: "link-3", Type: "Clones", InwardIssue: "TEST-4"},    // Ignored (not Blocks type)
+			{ID: "link-4", Type: "Blocking", OutwardIssue: "TEST-5"}, // Goes to JiraIsBlockedBy
 		},
 	})
 

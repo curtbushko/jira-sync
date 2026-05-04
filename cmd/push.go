@@ -10,15 +10,16 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/filesystem"
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/application/push"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 // Common Jira configuration errors.
@@ -115,7 +116,7 @@ func runPush(cmd *cobra.Command, args []string) error {
 
 	if !flags.skipConfirm {
 		if !confirmPush(len(tasks)) {
-			color.Yellow("Cancelled")
+			color.Yellow("Canceled")
 			return nil
 		}
 	}

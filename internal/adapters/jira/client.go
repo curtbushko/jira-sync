@@ -7,6 +7,7 @@ import (
 	"time"
 
 	jira "github.com/andygrunwald/go-jira"
+
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
 )

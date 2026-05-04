@@ -14,15 +14,15 @@ type MockJiraClient struct {
 	mu sync.Mutex
 
 	// Function hooks for customizing behavior
-	CreateIssueFunc        func(ctx context.Context, req ports.CreateIssueRequest) (*ports.Issue, error)
-	UpdateIssueFunc        func(ctx context.Context, key string, req ports.UpdateIssueRequest) error
-	CreateLinkFunc         func(ctx context.Context, inward, outward, linkType string) error
-	GetIssueLinksFunc      func(ctx context.Context, key string) ([]ports.IssueLink, error)
-	DeleteLinkFunc         func(ctx context.Context, linkID string) error
-	GetIssueFunc           func(ctx context.Context, key string) (*ports.Issue, error)
-	GetIssueWithLinksFunc  func(ctx context.Context, key string) (*ports.IssueWithLinks, error)
-	GetTransitionsFunc     func(ctx context.Context, key string) ([]ports.Transition, error)
-	DoTransitionFunc       func(ctx context.Context, key, transitionID string) error
+	CreateIssueFunc       func(ctx context.Context, req ports.CreateIssueRequest) (*ports.Issue, error)
+	UpdateIssueFunc       func(ctx context.Context, key string, req ports.UpdateIssueRequest) error
+	CreateLinkFunc        func(ctx context.Context, inward, outward, linkType string) error
+	GetIssueLinksFunc     func(ctx context.Context, key string) ([]ports.IssueLink, error)
+	DeleteLinkFunc        func(ctx context.Context, linkID string) error
+	GetIssueFunc          func(ctx context.Context, key string) (*ports.Issue, error)
+	GetIssueWithLinksFunc func(ctx context.Context, key string) (*ports.IssueWithLinks, error)
+	GetTransitionsFunc    func(ctx context.Context, key string) ([]ports.Transition, error)
+	DoTransitionFunc      func(ctx context.Context, key, transitionID string) error
 
 	// Call tracking
 	CreateIssueCalls       []ports.CreateIssueRequest
@@ -36,8 +36,8 @@ type MockJiraClient struct {
 	DoTransitionCalls      []DoTransitionCall
 
 	// Stored data for testing
-	StoredLinks       map[string][]ports.IssueLink       // key -> links
-	StoredIssues      map[string]*ports.IssueWithLinks   // key -> issue with links
+	StoredLinks  map[string][]ports.IssueLink     // key -> links
+	StoredIssues map[string]*ports.IssueWithLinks // key -> issue with links
 
 	// Auto-increment for issue keys
 	issueCounter int

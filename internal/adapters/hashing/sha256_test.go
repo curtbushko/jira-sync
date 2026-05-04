@@ -3,8 +3,9 @@ package hashing
 import (
 	"testing"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 func TestHashComputer_ComputeHash(t *testing.T) {

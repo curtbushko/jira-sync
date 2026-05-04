@@ -1,73 +1,8 @@
-OS ?= $(shell uname | tr '[:upper:]' '[:lower:]')
-ARCH ?= $(shell uname -m | tr '[:upper:]' '[:lower:]')
-DATELOG := "[$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')]"
-BASEREPO := $(shell git remote get-url origin)
-BINARY := $(shell basename -s .git $(BASEREPO))
+# Proxy all make commands to go-task
+.DEFAULT_GOAL := _default
 
+_default:
+	@task
 
-ifeq ($(ARCH),x86_64)
-	ARCH=amd64
-endif
-
-.PHONY: default
-default: help
-
-.PHONY: build
-build: ## Build the binary
-	@mkdir -p $(CURDIR)/bin/$(OS)-$(ARCH)
-	@echo "$(DATELOG) Building binary"
-	GOOS=$(OS) GOARCH=$(ARCH) go build -o $(CURDIR)/bin/$(OS)-$(ARCH)/$(BINARY)
-	@chmod +x $(CURDIR)/bin/$(OS)-$(ARCH)/$(BINARY)
-
-.PHONY: run
-run: ## Run the binary
-	$(CURDIR)/bin/$(OS)-$(ARCH)/$(BINARY)
-
-.PHONY: clean
-clean: ## Clean /bin directory
-	@rm -rf $(CURDIR)/bin
-
-.PHONY: install
-install: ## Install the binary using go install
-	@echo "$(DATELOG) Installing $(BINARY)"
-	GOOS=$(OS) GOARCH=$(ARCH) go install
-
-.PHONY: golangci-lint
-golangci-lint: ## Run golangci-lint
-	@echo "$(DATELOG) Running golangci-lint"
-	golangci-lint run -v -c $(CURDIR)/.golangci.yml
-
-.PHONY: arch-lint
-arch-lint: ## Run go-arch-lint
-	@echo "$(DATELOG) Running go-arch-lint"
-	go-arch-lint check
-
-.PHONY: ai-lint
-ai-lint: ## Run go-ai-lint
-	@echo "$(DATELOG) Running go-ai-lint"
-	go-ai-lint ./...
-
-.PHONY: lint
-lint: golangci-lint arch-lint ai-lint ## Run all linters
-
-.PHONY: test
-test: ## Run go tests
-	@echo "$(DATELOG) Running tests"
-	go test ./...
-
-.PHONY: tidy
-tidy: ## Run go mod tidy
-	@echo "$(DATELOG) Running go mod tidy"
-	go mod tidy
-
-.PHONY: vet
-vet: ## Run go vet
-	@echo "$(DATELOG) Running go vet"
-	go vet ./...
-
-.PHONY: help
-help: ## Show this help
-	@echo "Specify a command. The choices are:"
-	@grep -hE '^[0-9a-zA-Z_-]+:.*?## .*$$' ${MAKEFILE_LIST} | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[0;36m%-20s\033[m %s\n", $$1, $$2}'
-	@echo ""
-
+%:
+	@task $@

@@ -1,0 +1,78 @@
+version: "3"
+
+# Built-in variables used: ROOT_DIR
+output: prefixed
+
+vars:
+  OS:
+    sh: go env GOOS
+  ARCH:
+    sh: go env GOARCH
+  BINARY:
+    sh: basename -s .git $(git remote get-url origin)
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the binary
+    cmds:
+      - mkdir -p {{.ROOT_DIR}}/bin/{{.OS}}-{{.ARCH}}
+      - GOOS={{.OS}} GOARCH={{.ARCH}} go build -o {{.ROOT_DIR}}/bin/{{.OS}}-{{.ARCH}}/{{.BINARY}} .
+      - chmod +x {{.ROOT_DIR}}/bin/{{.OS}}-{{.ARCH}}/{{.BINARY}}
+
+  run:
+    desc: Run the binary
+    cmds:
+      - "{{.ROOT_DIR}}/bin/{{.OS}}-{{.ARCH}}/{{.BINARY}}"
+
+  clean:
+    desc: Clean /bin directory
+    cmds:
+      - rm -rf {{.ROOT_DIR}}/bin
+
+  install:
+    desc: Install the binary using go install
+    cmds:
+      - GOOS={{.OS}} GOARCH={{.ARCH}} go install .
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: lint:vet
+      - task: lint:golangci
+      - task: lint:arch
+      - task: lint:ai
+
+  lint:vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  lint:golangci:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run -v -c {{.ROOT_DIR}}/.golangci.yml
+
+  lint:arch:
+    desc: Run go-arch-lint
+    cmds:
+      - go-arch-lint check --arch-file {{.ROOT_DIR}}/.go-arch-lint.yml
+
+  lint:ai:
+    desc: Run go-ai-lint with all analyzers
+    cmds:
+      - go-ai-lint ./...
+
+  test:
+    desc: Run go tests
+    cmds:
+      - go test ./...
+
+  tidy:
+    desc: Run go mod tidy
+    cmds:
+      - go mod tidy

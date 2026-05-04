@@ -5,12 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPullTask_SyncsFromJira(t *testing.T) {
@@ -141,8 +142,8 @@ func TestPullTask_SyncsDependencies(t *testing.T) {
 	task := &domain.TaskFile{
 		Path: "/tasks/task1.md",
 		Frontmatter: domain.Frontmatter{
-			Title:            "KB-1: Task 1",
-			JiraNumber:       "GUARD-101",
+			Title:           "KB-1: Task 1",
+			JiraNumber:      "GUARD-101",
 			JiraIsBlockedBy: nil,
 		},
 	}

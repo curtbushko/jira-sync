@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/spf13/cobra"
+
+	"github.com/curtbushko/jira-sync/internal/domain"
 )
 
 var generateConfigCmd = &cobra.Command{

@@ -92,9 +92,9 @@ func TestMigrateFrontmatter_AllFieldsPresent(t *testing.T) {
 	migrated := task.MigrateFrontmatter()
 
 	assert.False(t, migrated, "should return false when no migration needed")
-	assert.Equal(t, "In Progress", task.Frontmatter.JiraState) // unchanged
+	assert.Equal(t, "In Progress", task.Frontmatter.JiraState)     // unchanged
 	assert.Equal(t, SyncStatusLinked, task.Frontmatter.SyncStatus) // unchanged
-	assert.Equal(t, "Task", task.Frontmatter.JiraType) // unchanged
+	assert.Equal(t, "Task", task.Frontmatter.JiraType)             // unchanged
 }
 
 func TestMigrateFrontmatter_PartialFields(t *testing.T) {
@@ -109,7 +109,7 @@ func TestMigrateFrontmatter_PartialFields(t *testing.T) {
 	migrated := task.MigrateFrontmatter()
 
 	assert.True(t, migrated)
-	assert.Equal(t, "Done", task.Frontmatter.JiraState)       // preserved
+	assert.Equal(t, "Done", task.Frontmatter.JiraState)             // preserved
 	assert.Equal(t, SyncStatusPending, task.Frontmatter.SyncStatus) // set default
 	assert.NotNil(t, task.Frontmatter.JiraBlocks)
 	assert.NotNil(t, task.Frontmatter.JiraIsBlockedBy)

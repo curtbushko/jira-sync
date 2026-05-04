@@ -17,9 +17,9 @@ func FuzzExtractTaskID(f *testing.F) {
 		"MET-12: Logging Integration",
 		"HELM-14: Documentation",
 		"Simple Task Without Prefix",
-		"", // Empty string
-		":", // Just colon
-		"KB-1:", // ID with colon but no title
+		"",             // Empty string
+		":",            // Just colon
+		"KB-1:",        // ID with colon but no title
 		":Description", // Colon at start
 		"Multiple: Colons: Here",
 		"TASK-123456789: Very Long ID",

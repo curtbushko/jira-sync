@@ -25,7 +25,7 @@ type Frontmatter struct {
 	JiraURL            string   `yaml:"jira-url"`
 	SyncStatus         string   `yaml:"sync-status"`
 	JiraParent         string   `yaml:"jira-parent"`
-	JiraBlocks         []string `yaml:"jira-blocks"`       // Issues this task blocks (OutwardIssue)
+	JiraBlocks         []string `yaml:"jira-blocks"`        // Issues this task blocks (OutwardIssue)
 	JiraIsBlockedBy    []string `yaml:"jira-is-blocked-by"` // Issues that block this task (InwardIssue)
 	ContentHash        string   `yaml:"content-hash"`
 }
@@ -39,7 +39,6 @@ func (t *TaskFile) TaskID() string {
 	}
 	return t.Frontmatter.Title
 }
-
 
 // MigrateFrontmatter adds missing fields with default values.
 // Returns true if any fields were migrated, false if no changes were needed.

@@ -7,12 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/curtbushko/jira-sync/internal/adapters/hashing"
 	"github.com/curtbushko/jira-sync/internal/adapters/jira"
 	"github.com/curtbushko/jira-sync/internal/domain"
 	"github.com/curtbushko/jira-sync/internal/ports"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPushService_CategorizeTasks(t *testing.T) {
@@ -185,19 +186,19 @@ func TestPushService_LinkDependencies(t *testing.T) {
 			tasks := []*domain.TaskFile{
 				{
 					Frontmatter: domain.Frontmatter{
-						Title:            "KB-1: First",
-						JiraNumber:       "GUARD-101",
-						SyncStatus:       domain.SyncStatusCreated,
-						JiraParent:       "GUARD-100",
+						Title:           "KB-1: First",
+						JiraNumber:      "GUARD-101",
+						SyncStatus:      domain.SyncStatusCreated,
+						JiraParent:      "GUARD-100",
 						JiraIsBlockedBy: []string{},
 					},
 				},
 				{
 					Frontmatter: domain.Frontmatter{
-						Title:            "KB-2: Second",
-						JiraNumber:       "GUARD-102",
-						SyncStatus:       domain.SyncStatusCreated,
-						JiraParent:       "GUARD-100",
+						Title:           "KB-2: Second",
+						JiraNumber:      "GUARD-102",
+						SyncStatus:      domain.SyncStatusCreated,
+						JiraParent:      "GUARD-100",
 						JiraIsBlockedBy: []string{testCase.dependency},
 					},
 				},
@@ -227,28 +228,28 @@ func TestPushService_LinkDependencies_MultipleDeps(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:            "KB-1: First",
-				JiraNumber:       "GUARD-101",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-1: First",
+				JiraNumber:      "GUARD-101",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:            "ERR-1: Second",
-				JiraNumber:       "GUARD-102",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "ERR-1: Second",
+				JiraNumber:      "GUARD-102",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{},
 			},
 		},
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:            "CTRL-1: Third",
-				JiraNumber:       "GUARD-103",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "CTRL-1: Third",
+				JiraNumber:      "GUARD-103",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"KB-1", "ERR-1"},
 			},
 		},
@@ -269,10 +270,10 @@ func TestPushService_LinkDependencies_MissingDep(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:            "KB-2: Second",
-				JiraNumber:       "GUARD-102",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-2: Second",
+				JiraNumber:      "GUARD-102",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"invalid-dep"}, // lowercase, not a valid Jira key
 			},
 		},
@@ -292,10 +293,10 @@ func TestPushService_LinkDependencies_ExternalJiraKey(t *testing.T) {
 	tasks := []*domain.TaskFile{
 		{
 			Frontmatter: domain.Frontmatter{
-				Title:            "KB-1: First",
-				JiraNumber:       "GUARD-101",
-				SyncStatus:       domain.SyncStatusCreated,
-				JiraParent:       "GUARD-100",
+				Title:           "KB-1: First",
+				JiraNumber:      "GUARD-101",
+				SyncStatus:      domain.SyncStatusCreated,
+				JiraParent:      "GUARD-100",
 				JiraIsBlockedBy: []string{"GUARD-999"}, // External Jira key, not in local tasks
 			},
 		},
