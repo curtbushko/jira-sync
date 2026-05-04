@@ -182,14 +182,21 @@ func (c *Client) GetIssue(ctx context.Context, key string) (*ports.Issue, error)
 		updated = time.Time(issue.Fields.Updated)
 	}
 
+	// Extract resolution date
+	var resolutionDate time.Time
+	if issue.Fields != nil {
+		resolutionDate = time.Time(issue.Fields.Resolutiondate)
+	}
+
 	return &ports.Issue{
-		Key:         issue.Key,
-		Self:        issue.Self,
-		Summary:     issue.Fields.Summary,
-		Description: issue.Fields.Description,
-		Status:      status,
-		Assignee:    assignee,
-		Updated:     updated,
+		Key:            issue.Key,
+		Self:           issue.Self,
+		Summary:        issue.Fields.Summary,
+		Description:    issue.Fields.Description,
+		Status:         status,
+		Assignee:       assignee,
+		Updated:        updated,
+		ResolutionDate: resolutionDate,
 	}, nil
 }
 
@@ -352,6 +359,12 @@ func populateIssueFields(result *ports.IssueWithLinks, issue *jira.Issue) {
 	createdTime := time.Time(issue.Fields.Created)
 	if !createdTime.IsZero() {
 		result.Created = createdTime.Format("2006-01-02T15:04:05.000-0700")
+	}
+
+	// Extract resolution date from the Resolutiondate field
+	resolutionTime := time.Time(issue.Fields.Resolutiondate)
+	if !resolutionTime.IsZero() {
+		result.ResolutionDate = resolutionTime.Format("2006-01-02T15:04:05.000-0700")
 	}
 
 	// Extract issue links

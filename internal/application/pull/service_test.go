@@ -47,6 +47,73 @@ func TestPullTask_SyncsFromJira(t *testing.T) {
 	assert.NotEmpty(t, task.Frontmatter.ContentHash)
 }
 
+func TestPullTask_SyncsResolutionDate(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:      "KB-1: Task",
+			JiraNumber: "GUARD-123",
+			JiraState:  "Todo",
+		},
+	}
+
+	resolutionTime := time.Date(2026, 1, 20, 14, 30, 0, 0, time.FixedZone("MST", -7*3600))
+
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:            "GUARD-123",
+			Summary:        "KB-1: Resolved Task",
+			Description:    "Resolved description",
+			Status:         "Done",
+			ResolutionDate: resolutionTime,
+			Updated:        time.Now(),
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher, "Blocking")
+	result := svc.PullTask(context.Background(), task)
+
+	require.NoError(t, result.Error)
+	assert.Equal(t, "Done", task.Frontmatter.JiraState)
+	assert.Equal(t, "2026-01-20T14:30:00.000-0700", task.Frontmatter.JiraResolutionDate)
+}
+
+func TestPullTask_EmptyResolutionDateWhenUnresolved(t *testing.T) {
+	mockJira := jira.NewMockJiraClient()
+	hasher := hashing.NewSHA256HashComputer()
+
+	task := &domain.TaskFile{
+		Path: "/tasks/test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:              "KB-1: Task",
+			JiraNumber:         "GUARD-123",
+			JiraState:          "Todo",
+			JiraResolutionDate: "2026-01-15T10:00:00.000-0700", // Old resolution date
+		},
+	}
+
+	mockJira.GetIssueFunc = func(_ context.Context, _ string) (*ports.Issue, error) {
+		return &ports.Issue{
+			Key:            "GUARD-123",
+			Summary:        "KB-1: Open Task",
+			Description:    "Open description",
+			Status:         "In Progress",
+			ResolutionDate: time.Time{}, // Zero time (not resolved)
+			Updated:        time.Now(),
+		}, nil
+	}
+
+	svc := NewService(mockJira, hasher, "Blocking")
+	result := svc.PullTask(context.Background(), task)
+
+	require.NoError(t, result.Error)
+	assert.Equal(t, "In Progress", task.Frontmatter.JiraState)
+	assert.Equal(t, "", task.Frontmatter.JiraResolutionDate)
+}
+
 func TestPullTask_SkipsWithoutJiraNumber(t *testing.T) {
 	mockJira := jira.NewMockJiraClient()
 	hasher := hashing.NewSHA256HashComputer()

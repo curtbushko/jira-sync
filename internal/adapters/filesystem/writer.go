@@ -18,19 +18,20 @@ func NewWriter() *Writer {
 
 // frontmatterOutput is the struct used for YAML output with explicit field ordering.
 type frontmatterOutput struct {
-	Title           string   `yaml:"title"`
-	JiraNumber      string   `yaml:"jira-number"`
-	JiraProject     string   `yaml:"jira-project"`
-	JiraType        string   `yaml:"jira-type"`
-	JiraState       string   `yaml:"jira-state"`
-	JiraAssignee    string   `yaml:"jira-assignee"`
-	CreatedDate     string   `yaml:"created-date"`
-	JiraURL         string   `yaml:"jira-url"`
-	SyncStatus      string   `yaml:"sync-status"`
-	JiraParent      string   `yaml:"jira-parent"`
-	JiraBlocks      []string `yaml:"jira-blocks,flow"`
-	JiraIsBlockedBy []string `yaml:"jira-is-blocked-by,flow"`
-	ContentHash     string   `yaml:"content-hash"`
+	Title              string   `yaml:"title"`
+	JiraNumber         string   `yaml:"jira-number"`
+	JiraProject        string   `yaml:"jira-project"`
+	JiraType           string   `yaml:"jira-type"`
+	JiraState          string   `yaml:"jira-state"`
+	JiraAssignee       string   `yaml:"jira-assignee"`
+	JiraResolutionDate string   `yaml:"jira-resolution-date"`
+	CreatedDate        string   `yaml:"created-date"`
+	JiraURL            string   `yaml:"jira-url"`
+	SyncStatus         string   `yaml:"sync-status"`
+	JiraParent         string   `yaml:"jira-parent"`
+	JiraBlocks         []string `yaml:"jira-blocks,flow"`
+	JiraIsBlockedBy    []string `yaml:"jira-is-blocked-by,flow"`
+	ContentHash        string   `yaml:"content-hash"`
 }
 
 // Marshal converts a TaskFile to markdown content with YAML frontmatter.
@@ -48,19 +49,20 @@ func (w *Writer) Marshal(task *domain.TaskFile) (string, error) {
 
 	// Create output struct with proper field ordering
 	out := frontmatterOutput{
-		Title:           task.Frontmatter.Title,
-		JiraNumber:      task.Frontmatter.JiraNumber,
-		JiraProject:     task.Frontmatter.JiraProject,
-		JiraType:        task.Frontmatter.JiraType,
-		JiraState:       task.Frontmatter.JiraState,
-		JiraAssignee:    task.Frontmatter.JiraAssignee,
-		CreatedDate:     task.Frontmatter.CreatedDate,
-		JiraURL:         task.Frontmatter.JiraURL,
-		SyncStatus:      task.Frontmatter.SyncStatus,
-		JiraParent:      task.Frontmatter.JiraParent,
-		JiraBlocks:      jiraBlocks,
-		JiraIsBlockedBy: jiraIsBlockedBy,
-		ContentHash:     task.Frontmatter.ContentHash,
+		Title:              task.Frontmatter.Title,
+		JiraNumber:         task.Frontmatter.JiraNumber,
+		JiraProject:        task.Frontmatter.JiraProject,
+		JiraType:           task.Frontmatter.JiraType,
+		JiraState:          task.Frontmatter.JiraState,
+		JiraAssignee:       task.Frontmatter.JiraAssignee,
+		JiraResolutionDate: task.Frontmatter.JiraResolutionDate,
+		CreatedDate:        task.Frontmatter.CreatedDate,
+		JiraURL:            task.Frontmatter.JiraURL,
+		SyncStatus:         task.Frontmatter.SyncStatus,
+		JiraParent:         task.Frontmatter.JiraParent,
+		JiraBlocks:         jiraBlocks,
+		JiraIsBlockedBy:    jiraIsBlockedBy,
+		ContentHash:        task.Frontmatter.ContentHash,
 	}
 
 	var buf bytes.Buffer

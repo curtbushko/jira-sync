@@ -209,6 +209,50 @@ func TestWriter_Marshal_WithoutAssignee(t *testing.T) {
 	assert.Contains(t, content, "jira-assignee: \"\"")
 }
 
+func TestWriter_Marshal_WithResolutionDate(t *testing.T) {
+	task := &domain.TaskFile{
+		Path: "test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:                "KB-1: Resolved Task",
+			JiraNumber:           "GUARD-101",
+			JiraProject:          "GUARD",
+			JiraState:            "Done",
+			JiraAssignee:         "john.doe",
+			JiraResolutionDate:   "2026-01-20T14:30:00.000-0700",
+			SyncStatus:           "linked",
+			JiraParent:           "GUARD-100",
+			ContentHash:          "abc123",
+		},
+		Description: "Task with resolution date.",
+	}
+
+	writer := NewWriter()
+	content, err := writer.Marshal(task)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "jira-resolution-date: 2026-01-20T14:30:00.000-0700")
+}
+
+func TestWriter_Marshal_WithoutResolutionDate(t *testing.T) {
+	task := &domain.TaskFile{
+		Path: "test.md",
+		Frontmatter: domain.Frontmatter{
+			Title:       "KB-2: Open Task",
+			JiraProject: "GUARD",
+			JiraState:   "Todo",
+			SyncStatus:  "pending",
+			JiraParent:  "GUARD-100",
+		},
+		Description: "Task without resolution date.",
+	}
+
+	writer := NewWriter()
+	content, err := writer.Marshal(task)
+
+	require.NoError(t, err)
+	assert.Contains(t, content, "jira-resolution-date: \"\"")
+}
+
 func hasProperFrontmatterDelimiters(content string) bool {
 	lines := splitLines(content)
 	if len(lines) < 2 {

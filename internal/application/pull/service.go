@@ -132,6 +132,13 @@ func (s *Service) syncFromJira(task *domain.TaskFile, jiraIssue *ports.Issue) {
 
 	task.Frontmatter.JiraAssignee = jiraIssue.Assignee
 
+	// Sync resolution date - empty string if not resolved
+	if !jiraIssue.ResolutionDate.IsZero() {
+		task.Frontmatter.JiraResolutionDate = jiraIssue.ResolutionDate.Format("2006-01-02T15:04:05.000-0700")
+	} else {
+		task.Frontmatter.JiraResolutionDate = ""
+	}
+
 	// Update sync metadata
 	task.Frontmatter.ContentHash = s.hasher.ComputeHash(task)
 }

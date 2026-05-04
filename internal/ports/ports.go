@@ -25,31 +25,33 @@ type TaskRepository interface {
 
 // Issue represents a Jira issue.
 type Issue struct {
-	Key         string
-	Self        string // URL to the issue
-	Summary     string
-	Description string
-	Status      string
-	Assignee    string    // Assignee username
-	Updated     time.Time // Last updated timestamp from Jira
+	Key            string
+	Self           string    // URL to the issue
+	Summary        string
+	Description    string
+	Status         string
+	Assignee       string    // Assignee username
+	Updated        time.Time // Last updated timestamp from Jira
+	ResolutionDate time.Time // Resolution date (zero if not resolved)
 }
 
 // IssueWithLinks represents a Jira issue with expanded link information.
 // Used by the export command to fetch all issue details in one request.
 type IssueWithLinks struct {
-	Key         string
-	URL         string // Full URL to the issue (e.g., https://jira.example.com/browse/PROJ-123)
-	Project     string // Project key (e.g., "PROJ")
-	Summary     string
-	Description string
-	Status      string
-	Assignee    string      // Assignee username
-	IssueType   string      // Issue type (e.g., "Story", "Task", "Epic", "Bug")
-	Parent      string      // Parent issue key (e.g., "PROJ-100"), empty if no parent
-	Created     string      // Issue creation datetime in Jira format
-	StartDate   string      // Start date field (may be empty)
-	EndDate     string      // End date field (may be empty)
-	Links       []IssueLink // Issue links
+	Key            string
+	URL            string // Full URL to the issue (e.g., https://jira.example.com/browse/PROJ-123)
+	Project        string // Project key (e.g., "PROJ")
+	Summary        string
+	Description    string
+	Status         string
+	Assignee       string      // Assignee username
+	IssueType      string      // Issue type (e.g., "Story", "Task", "Epic", "Bug")
+	Parent         string      // Parent issue key (e.g., "PROJ-100"), empty if no parent
+	Created        string      // Issue creation datetime in Jira format
+	ResolutionDate string      // Resolution datetime in Jira format (empty if not resolved)
+	StartDate      string      // Start date field (may be empty)
+	EndDate        string      // End date field (may be empty)
+	Links          []IssueLink // Issue links
 }
 
 // CreateIssueRequest contains the data needed to create a Jira issue.

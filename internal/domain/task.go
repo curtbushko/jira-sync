@@ -14,19 +14,20 @@ type TaskFile struct {
 
 // Frontmatter contains the YAML frontmatter fields of a task file.
 type Frontmatter struct {
-	Title           string   `yaml:"title"`
-	JiraNumber      string   `yaml:"jira-number"`
-	JiraProject     string   `yaml:"jira-project"`
-	JiraType        string   `yaml:"jira-type"`
-	JiraState       string   `yaml:"jira-state"`
-	JiraAssignee    string   `yaml:"jira-assignee"`
-	CreatedDate     string   `yaml:"created-date"`
-	JiraURL         string   `yaml:"jira-url"`
-	SyncStatus      string   `yaml:"sync-status"`
-	JiraParent      string   `yaml:"jira-parent"`
-	JiraBlocks      []string `yaml:"jira-blocks"`       // Issues this task blocks (OutwardIssue)
-	JiraIsBlockedBy []string `yaml:"jira-is-blocked-by"` // Issues that block this task (InwardIssue)
-	ContentHash     string   `yaml:"content-hash"`
+	Title              string   `yaml:"title"`
+	JiraNumber         string   `yaml:"jira-number"`
+	JiraProject        string   `yaml:"jira-project"`
+	JiraType           string   `yaml:"jira-type"`
+	JiraState          string   `yaml:"jira-state"`
+	JiraAssignee       string   `yaml:"jira-assignee"`
+	JiraResolutionDate string   `yaml:"jira-resolution-date"`
+	CreatedDate        string   `yaml:"created-date"`
+	JiraURL            string   `yaml:"jira-url"`
+	SyncStatus         string   `yaml:"sync-status"`
+	JiraParent         string   `yaml:"jira-parent"`
+	JiraBlocks         []string `yaml:"jira-blocks"`       // Issues this task blocks (OutwardIssue)
+	JiraIsBlockedBy    []string `yaml:"jira-is-blocked-by"` // Issues that block this task (InwardIssue)
+	ContentHash        string   `yaml:"content-hash"`
 }
 
 // TaskID extracts the task ID prefix from the title (e.g., "KB-1" from "KB-1: Title").
