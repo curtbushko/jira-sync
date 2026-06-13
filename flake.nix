@@ -53,6 +53,12 @@
           ];
 
           shellHook = ''
+            # Auto-pull if on main branch
+            if [ "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" = "main" ]; then
+              echo "On main branch, pulling latest changes..."
+              git pull --quiet || true
+            fi
+
             cp -f ${sharedConfigs}/.golangci.yml .golangci.yml
             cp -f ${sharedConfigs}/.go-arch-lint.yml .go-arch-lint.yml
             cp -f ${sharedConfigs}/.go-ai-lint.yml .go-ai-lint.yml
